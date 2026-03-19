@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   ChevronLeft, MessageCircle, Users, CircleDashed, User, 
   Search, Edit, Camera, UserPlus, Tags, ChevronRight, BookOpen,
-  Send, Image as ImageIcon, Mic, Plus as PlusIcon, X, Check
+  Send, Image as ImageIcon, Mic, Plus as PlusIcon, X, Check, Video
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
@@ -15,6 +15,11 @@ interface Chat {
   unread: number;
   avatar: string;
   isImage?: boolean;
+  persona?: string;
+  nickname?: string;
+  displayId?: string;
+  isPinned?: boolean;
+  background?: string;
 }
 
 interface Contact {
@@ -68,6 +73,12 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
     items: contactGroups[letter].sort((a, b) => a.name.localeCompare(b.name))
   }));
 
+  const sortedChats = [...chats].sort((a, b) => {
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
+    return 0;
+  });
+
   const handleAddPersona = (persona: any, asNewFriend: boolean, greeting: string) => {
     const newId = Date.now().toString();
     const avatarClass = persona.avatar || 'bg-gradient-to-br from-pink-500 to-rose-500';
@@ -102,7 +113,8 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
         avatar: contact.avatar,
         message: '开始聊天吧...',
         time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-        unread: 0
+        unread: 0,
+        persona: contact.persona
       };
       setChats(prev => [newChat, ...prev]);
       setActiveChat(newChat);
@@ -123,9 +135,20 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
       avatar: friend.avatar,
       message: friend.greeting,
       time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-      unread: 1
+      unread: 1,
+      persona: friend.persona
     }, ...prev]);
     setNewFriends(prev => prev.filter(f => f.id !== friend.id));
+  };
+
+  const handleUpdateChat = (id: string, updates: Partial<Chat>) => {
+    setChats(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+    setActiveChat(prev => prev?.id === id ? { ...prev, ...updates } : prev);
+    
+    // 同步更新联系人列表中的备注名和头像
+    if (updates.name || updates.avatar) {
+      setContacts(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+    }
   };
 
   return (
@@ -194,11 +217,11 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
                 </div>
 
                 {/* Chat List */}
-                {chats.map(chat => (
+                {sortedChats.map(chat => (
                   <div 
                     key={chat.id} 
                     onClick={() => setActiveChat(chat)}
-                    className="flex items-center gap-3 py-3 active:scale-[0.98] transition-transform cursor-pointer group"
+                    className={`flex items-center gap-3 py-3 active:scale-[0.98] transition-transform cursor-pointer group ${chat.isPinned ? 'bg-white/5 px-2 -mx-2 rounded-xl' : ''}`}
                   >
                     <Avatar src={chat.avatar} name={chat.name} />
                     <div className="flex-1 min-w-0 border-b border-white/5 pb-4 pt-1 group-last:border-none">
@@ -362,6 +385,7 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
             key="chat-view"
             chat={activeChat} 
             onBack={() => setActiveChat(null)} 
+            onUpdateChat={handleUpdateChat}
           />
         )}
       </AnimatePresence>
@@ -777,21 +801,108 @@ function NewChatView({ contacts, chats, onBack, onSelect }: { contacts: Contact[
   );
 }
 
-function ChatView({ chat, onBack }: { chat: Chat, onBack: () => void, key?: string }) {
+function ChatView({ chat, onBack, onUpdateChat }: { chat: Chat, onBack: () => void, onUpdateChat: (id: string, updates: Partial<Chat>) => void, key?: string }) {
   const [messages, setMessages] = useState([
     { id: '1', text: chat.message, isSelf: false, time: chat.time }
   ]);
   const [input, setInput] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return;
-    setMessages([...messages, {
+    const userText = input.trim();
+    const newMsg = {
       id: Date.now().toString(),
-      text: input,
+      text: userText,
       isSelf: true,
       time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-    }]);
+    };
+    setMessages(prev => [...prev, newMsg]);
     setInput('');
+    setIsTyping(true);
+
+    try {
+      const apiKey = localStorage.getItem('ai_api_key') || process.env.GEMINI_API_KEY;
+      const model = localStorage.getItem('ai_model') || 'gemini-3.1-pro-preview';
+      
+      if (!apiKey) {
+        setTimeout(() => {
+          setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            text: '请先在设置中配置API Key。',
+            isSelf: false,
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+          }]);
+          setIsTyping(false);
+        }, 1000);
+        return;
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+      
+      if (!chat.nickname || !chat.displayId) {
+        const userPersonaDetails = localStorage.getItem('userPersonaDetails') || '';
+        const userNickname = localStorage.getItem('userNickname') || '用户';
+        const prompt = `你是一个AI，你的备注名是"${chat.name}"，你的人设是：${chat.persona || '一个乐于助人的AI助手'}。
+用户（昵称：${userNickname}，人设：${userPersonaDetails || '无'}）刚才对你说："${userText}"。
+请根据你的人设回复用户。同时，为你自己生成一个符合人设的网名（昵称）和一个6到15位的数字、字母或下划线组成的ID。
+请严格以JSON格式返回，不要包含其他内容，格式如下：
+{
+  "reply": "你的回复内容",
+  "nickname": "生成的昵称",
+  "id": "生成的ID"
+}`;
+        const response = await ai.models.generateContent({
+          model: model,
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+          }
+        });
+        
+        const data = JSON.parse(response.text || '{}');
+        
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          text: data.reply || '你好！',
+          isSelf: false,
+          time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+        }]);
+        
+        onUpdateChat(chat.id, { 
+          nickname: data.nickname || '未命名', 
+          displayId: data.id || Math.floor(100000 + Math.random() * 900000).toString() 
+        });
+      } else {
+        const userPersonaDetails = localStorage.getItem('userPersonaDetails') || '';
+        const userNickname = localStorage.getItem('userNickname') || '用户';
+        const prompt = `你是一个AI，你的名字是"${chat.name}"，昵称是"${chat.nickname}"，你的人设是：${chat.persona || '一个乐于助人的AI助手'}。
+用户（昵称：${userNickname}，人设：${userPersonaDetails || '无'}）刚才对你说："${userText}"。
+请根据你的人设回复用户。`;
+        const response = await ai.models.generateContent({
+          model: model,
+          contents: prompt,
+        });
+        
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          text: response.text || '...',
+          isSelf: false,
+          time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+        }]);
+      }
+    } catch (error) {
+      console.error(error);
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        text: '抱歉，网络开小差了...',
+        isSelf: false,
+        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+      }]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   return (
@@ -811,25 +922,48 @@ function ChatView({ chat, onBack }: { chat: Chat, onBack: () => void, key?: stri
           <h1 className="text-base font-medium">{chat.name}</h1>
           <span className="text-[10px] text-emerald-400">在线</span>
         </div>
-        <button className="text-white/70 hover:text-white p-2 -mr-2">
-          <User size={22} strokeWidth={1.5} />
-        </button>
+        <div className="flex items-center gap-1 -mr-2">
+          <button className="text-white/70 hover:text-white p-2">
+            <Video size={22} strokeWidth={1.5} />
+          </button>
+          <button onClick={() => setShowSettings(true)} className="text-white/70 hover:text-white p-2">
+            <User size={22} strokeWidth={1.5} />
+          </button>
+        </div>
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-neutral-950">
-        {messages.map(msg => (
-          <div key={msg.id} className={`flex ${msg.isSelf ? 'justify-end' : 'justify-start'} mb-4`}>
-            {!msg.isSelf && (
+      <div 
+        className="flex-1 overflow-y-auto p-4 bg-neutral-950 bg-cover bg-center bg-no-repeat relative"
+        style={chat.background ? { backgroundImage: `url(${chat.background})` } : {}}
+      >
+        {chat.background && <div className="absolute inset-0 bg-black/60 z-0" />}
+        <div className="relative z-10 space-y-4">
+          {messages.map(msg => (
+            <div key={msg.id} className={`flex ${msg.isSelf ? 'justify-end' : 'justify-start'} mb-4`}>
+              {!msg.isSelf && (
+                <div className="mr-2 mt-1">
+                  <Avatar src={chat.avatar} name={chat.name} size="sm" />
+                </div>
+              )}
+              <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${msg.isSelf ? 'bg-indigo-500 text-white rounded-tr-sm' : 'bg-neutral-800 text-white/90 rounded-tl-sm'}`}>
+                <p className="text-[15px] leading-relaxed break-words">{msg.text}</p>
+              </div>
+            </div>
+          ))}
+          {isTyping && (
+            <div className="flex justify-start mb-4">
               <div className="mr-2 mt-1">
                 <Avatar src={chat.avatar} name={chat.name} size="sm" />
               </div>
-            )}
-            <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${msg.isSelf ? 'bg-indigo-500 text-white rounded-tr-sm' : 'bg-neutral-800 text-white/90 rounded-tl-sm'}`}>
-              <p className="text-[15px] leading-relaxed break-words">{msg.text}</p>
+              <div className="max-w-[75%] rounded-2xl px-4 py-3 bg-neutral-800 text-white/90 rounded-tl-sm flex items-center gap-1">
+                <div className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
             </div>
-          </div>
-        ))}
+          )}
+        </div>
       </div>
 
       {/* Input Area */}
@@ -865,6 +999,276 @@ function ChatView({ chat, onBack }: { chat: Chat, onBack: () => void, key?: stri
               <Mic size={24} strokeWidth={1.5} />
             </button>
           )}
+        </div>
+      </div>
+      
+      {/* Settings Overlay */}
+      <AnimatePresence>
+        {showSettings && (
+          <ChatSettingsView 
+            chat={chat} 
+            onBack={() => setShowSettings(false)} 
+            onUpdateChat={onUpdateChat}
+            onClearHistory={() => setMessages([])}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+function ChatSettingsView({ chat, onBack, onUpdateChat, onClearHistory }: { chat: Chat, onBack: () => void, onUpdateChat: (id: string, updates: Partial<Chat>) => void, onClearHistory: () => void }) {
+  const [name, setName] = useState(chat.name || '');
+  const [nickname, setNickname] = useState(chat.nickname || '');
+  const [displayId, setDisplayId] = useState(chat.displayId || '');
+  const [isPinned, setIsPinned] = useState(chat.isPinned || false);
+  const [isDnd, setIsDnd] = useState(false);
+  const [background, setBackground] = useState(chat.background || '');
+  
+  const [userAvatar, setUserAvatar] = useState(localStorage.getItem('userAvatar') || '');
+  const [userNickname, setUserNickname] = useState(localStorage.getItem('userNickname') || '');
+  const [userId, setUserId] = useState(localStorage.getItem('userId') || '');
+  const [userPersonaDetails, setUserPersonaDetails] = useState(localStorage.getItem('userPersonaDetails') || '');
+
+  const bgInputRef = useRef<HTMLInputElement>(null);
+  const userAvatarInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSave = () => {
+    if (displayId && !/^[a-zA-Z0-9_]{6,15}$/.test(displayId)) {
+      alert('AI ID必须是6-15位字母、数字或下划线');
+      return;
+    }
+    if (userId && !/^[a-zA-Z0-9_]{6,15}$/.test(userId)) {
+      alert('用户 ID必须是6-15位字母、数字或下划线');
+      return;
+    }
+    
+    onUpdateChat(chat.id, {
+      name,
+      nickname,
+      displayId,
+      isPinned,
+      background
+    });
+
+    localStorage.setItem('userAvatar', userAvatar);
+    localStorage.setItem('userNickname', userNickname);
+    localStorage.setItem('userId', userId);
+    localStorage.setItem('userPersonaDetails', userPersonaDetails);
+
+    alert('设置已保存');
+    onBack();
+  };
+
+  const handleBgUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setBackground(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleUserAvatarUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setUserAvatar(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ x: '100%' }}
+      animate={{ x: 0 }}
+      exit={{ x: '100%' }}
+      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+      className="absolute inset-0 bg-neutral-950 z-50 flex flex-col text-white"
+    >
+      <div className="flex items-center px-4 py-3 pt-8 bg-neutral-900/80 backdrop-blur-xl border-b border-white/5 shrink-0">
+        <button onClick={onBack} className="text-white/70 hover:text-white flex items-center -ml-2 p-2">
+          <ChevronLeft size={26} strokeWidth={1.5} />
+          <span className="text-sm font-medium -ml-1">返回</span>
+        </button>
+        <h1 className="text-base font-medium ml-4">聊天设置</h1>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-24">
+        {/* AI Info */}
+        <div className="bg-neutral-900/60 border border-white/5 rounded-2xl p-4 flex items-start gap-4 shadow-lg">
+          <Avatar src={chat.avatar} name={name || chat.name} size="lg" />
+          <div className="flex flex-col flex-1 gap-2 py-1">
+            <div className="relative flex items-center">
+              <input 
+                value={name} 
+                onChange={e => setName(e.target.value)} 
+                className="w-full text-lg font-bold text-white/90 bg-transparent border-b border-white/10 outline-none focus:border-indigo-500 pb-1 pr-6" 
+                placeholder="备注名"
+              />
+              <Edit size={14} className="text-white/30 absolute right-1 bottom-2 pointer-events-none" />
+            </div>
+            <div className="flex items-center text-sm text-white/60 relative">
+              <span className="w-12 shrink-0">昵称：</span>
+              <input 
+                value={nickname} 
+                onChange={e => setNickname(e.target.value)} 
+                className="flex-1 bg-transparent border-b border-white/10 outline-none focus:border-indigo-500 pb-0.5 pr-5" 
+                placeholder="待生成..."
+              />
+              <Edit size={12} className="text-white/30 absolute right-1 bottom-1.5 pointer-events-none" />
+            </div>
+            <div className="flex items-center text-sm text-white/60 relative">
+              <span className="w-12 shrink-0">ID：</span>
+              <input 
+                value={displayId} 
+                onChange={e => setDisplayId(e.target.value)} 
+                className="flex-1 bg-transparent border-b border-white/10 outline-none focus:border-indigo-500 pb-0.5 pr-5" 
+                placeholder="待生成..."
+              />
+              <Edit size={12} className="text-white/30 absolute right-1 bottom-1.5 pointer-events-none" />
+            </div>
+          </div>
+        </div>
+        
+        {/* Chat Settings */}
+        <div className="bg-neutral-900/60 border border-white/5 rounded-2xl overflow-hidden shadow-lg divide-y divide-white/5">
+          <div className="px-4 py-3.5 flex justify-between items-center active:bg-white/5 cursor-pointer">
+            <span className="text-sm text-white/80">查找聊天记录</span>
+            <ChevronRight size={18} className="text-white/20" />
+          </div>
+          <div 
+            className="px-4 py-3.5 flex justify-between items-center active:bg-white/5 cursor-pointer"
+            onClick={() => setIsPinned(!isPinned)}
+          >
+            <span className="text-sm text-white/80">置顶聊天</span>
+            <div className={`w-12 h-6 rounded-full transition-colors relative ${isPinned ? 'bg-indigo-500' : 'bg-white/10'}`}>
+              <motion.div 
+                layout
+                className="w-5 h-5 bg-white rounded-full absolute top-0.5 shadow-sm"
+                initial={false}
+                animate={{ left: isPinned ? '26px' : '2px' }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              />
+            </div>
+          </div>
+          <div 
+            className="px-4 py-3.5 flex justify-between items-center active:bg-white/5 cursor-pointer"
+            onClick={() => setIsDnd(!isDnd)}
+          >
+            <span className="text-sm text-white/80">消息免打扰</span>
+            <div className={`w-12 h-6 rounded-full transition-colors relative ${isDnd ? 'bg-indigo-500' : 'bg-white/10'}`}>
+              <motion.div 
+                layout
+                className="w-5 h-5 bg-white rounded-full absolute top-0.5 shadow-sm"
+                initial={false}
+                animate={{ left: isDnd ? '26px' : '2px' }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Chat Background */}
+        <div className="bg-neutral-900/60 border border-white/5 rounded-2xl p-4 shadow-lg space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-white/80 font-medium">设置当前聊天背景</span>
+            <button onClick={() => setBackground('')} className="text-xs text-white/50 hover:text-white px-2 py-1 rounded bg-white/5">恢复默认</button>
+          </div>
+          <div className="flex items-center gap-3">
+            <div 
+              onClick={() => bgInputRef.current?.click()}
+              className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center cursor-pointer hover:bg-white/10 shrink-0 overflow-hidden relative"
+            >
+              {background ? (
+                <img src={background} alt="bg" className="w-full h-full object-cover" />
+              ) : (
+                <ImageIcon size={24} className="text-white/20" />
+              )}
+            </div>
+            <input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload} />
+            <div className="flex-1">
+              <input 
+                value={background}
+                onChange={e => setBackground(e.target.value)}
+                placeholder="或输入图片URL..."
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* User Persona */}
+        <div className="bg-neutral-900/60 border border-white/5 rounded-2xl p-4 shadow-lg space-y-4">
+          <span className="text-sm text-white/80 font-medium block">用户人设 (AI读取)</span>
+          
+          <div className="flex items-center gap-4">
+            <div 
+              onClick={() => userAvatarInputRef.current?.click()}
+              className="w-14 h-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center cursor-pointer hover:bg-white/10 shrink-0 overflow-hidden relative"
+            >
+              {userAvatar ? (
+                <img src={userAvatar} alt="avatar" className="w-full h-full object-cover" />
+              ) : (
+                <Camera size={20} className="text-white/20" />
+              )}
+            </div>
+            <input type="file" ref={userAvatarInputRef} className="hidden" accept="image/*" onChange={handleUserAvatarUpload} />
+            
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center text-sm">
+                <span className="w-12 text-white/60 shrink-0">昵称：</span>
+                <input 
+                  value={userNickname}
+                  onChange={e => setUserNickname(e.target.value)}
+                  placeholder="你的昵称"
+                  className="flex-1 bg-transparent border-b border-white/10 outline-none focus:border-indigo-500 pb-0.5 text-white"
+                />
+              </div>
+              <div className="flex items-center text-sm">
+                <span className="w-12 text-white/60 shrink-0">ID：</span>
+                <input 
+                  value={userId}
+                  onChange={e => setUserId(e.target.value)}
+                  placeholder="6-15位字母数字下划线"
+                  className="flex-1 bg-transparent border-b border-white/10 outline-none focus:border-indigo-500 pb-0.5 text-white"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <textarea 
+              value={userPersonaDetails}
+              onChange={e => setUserPersonaDetails(e.target.value)}
+              placeholder="详细描述你的人设，AI会根据这些信息与你互动..."
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 resize-none h-24"
+            />
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="space-y-3 pt-2">
+          <button className="w-full py-3 rounded-xl bg-red-500/10 text-red-500 font-medium text-sm hover:bg-red-500/20 transition-colors">
+            拉黑
+          </button>
+          <button 
+            onClick={() => {
+              if (confirm('确定要清空聊天记录吗？')) {
+                onClearHistory();
+                alert('已清空');
+              }
+            }}
+            className="w-full py-3 rounded-xl bg-white/5 text-white/90 font-medium text-sm hover:bg-white/10 transition-colors"
+          >
+            清空聊天记录
+          </button>
+          <button 
+            onClick={handleSave}
+            className="w-full py-3 rounded-xl bg-indigo-500 text-white font-medium text-sm hover:bg-indigo-600 transition-colors shadow-lg shadow-indigo-500/20"
+          >
+            保存设置
+          </button>
         </div>
       </div>
     </motion.div>
