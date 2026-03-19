@@ -37,6 +37,7 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
   const [isAddingPersona, setIsAddingPersona] = useState(false);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [showNewFriends, setShowNewFriends] = useState(false);
+  const [showNewChat, setShowNewChat] = useState(false);
 
   const [chats, setChats] = useState<Chat[]>([
     { id: '1', name: 'AI 助手 (GPT-4)', message: '我已经准备好协助你了。', time: '14:20', unread: 3, avatar: 'bg-gradient-to-br from-indigo-500 to-purple-500' },
@@ -90,6 +91,25 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
     setIsAddingPersona(false);
   };
 
+  const handleStartNewChat = (contact: Contact) => {
+    const existingChat = chats.find(c => c.id === contact.id);
+    if (existingChat) {
+      setActiveChat(existingChat);
+    } else {
+      const newChat: Chat = {
+        id: contact.id,
+        name: contact.name,
+        avatar: contact.avatar,
+        message: '开始聊天吧...',
+        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        unread: 0
+      };
+      setChats(prev => [newChat, ...prev]);
+      setActiveChat(newChat);
+    }
+    setShowNewChat(false);
+  };
+
   const handleAcceptFriend = (friend: NewFriend) => {
     setContacts(prev => [...prev, {
       id: friend.id,
@@ -133,7 +153,7 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
             {activeTab === 'chats' && (
               <>
                 <button className="text-white/70 hover:text-white transition-colors"><Camera size={22} strokeWidth={1.5} /></button>
-                <button className="text-white/70 hover:text-white transition-colors"><Edit size={22} strokeWidth={1.5} /></button>
+                <button onClick={() => setShowNewChat(true)} className="text-white/70 hover:text-white transition-colors"><Edit size={22} strokeWidth={1.5} /></button>
               </>
             )}
             {activeTab === 'contacts' && (
@@ -326,6 +346,15 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
             friends={newFriends} 
             onBack={() => setShowNewFriends(false)} 
             onAccept={handleAcceptFriend} 
+          />
+        )}
+        {showNewChat && (
+          <NewChatView 
+            key="new-chat-view"
+            contacts={contacts}
+            chats={chats}
+            onBack={() => setShowNewChat(false)}
+            onSelect={handleStartNewChat}
           />
         )}
         {activeChat && (
@@ -670,6 +699,79 @@ function NewFriendsView({ friends, onBack, onAccept }: { friends: NewFriend[], o
             ))}
           </div>
         )}
+      </div>
+    </motion.div>
+  );
+}
+
+function NewChatView({ contacts, chats, onBack, onSelect }: { contacts: Contact[], chats: Chat[], onBack: () => void, onSelect: (contact: Contact) => void, key?: string }) {
+  const contactGroups = contacts.reduce((acc, contact) => {
+    const letter = contact.name[0].toUpperCase();
+    if (!acc[letter]) acc[letter] = [];
+    acc[letter].push(contact);
+    return acc;
+  }, {} as Record<string, Contact[]>);
+
+  const sortedGroups = Object.keys(contactGroups).sort().map(letter => ({
+    letter,
+    items: contactGroups[letter].sort((a, b) => a.name.localeCompare(b.name))
+  }));
+
+  return (
+    <motion.div
+      initial={{ x: '100%' }}
+      animate={{ x: 0 }}
+      exit={{ x: '100%' }}
+      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+      className="absolute inset-0 bg-neutral-950 z-50 flex flex-col text-white"
+    >
+      <div className="flex items-center px-4 py-3 pt-8 bg-neutral-900/80 backdrop-blur-xl border-b border-white/5">
+        <button onClick={onBack} className="text-white/70 hover:text-white flex items-center -ml-2 p-2">
+          <ChevronLeft size={26} strokeWidth={1.5} />
+          <span className="text-sm font-medium -ml-1">返回</span>
+        </button>
+        <h1 className="text-base font-medium ml-4">选择联系人</h1>
+      </div>
+
+      <div className="flex-1 overflow-y-auto pb-6">
+        <div className="px-4 mb-2 mt-4">
+          <div className="bg-white/5 rounded-xl flex items-center px-3 py-2 border border-white/5">
+            <Search size={18} className="text-white/40 mr-2" />
+            <input 
+              type="text" 
+              placeholder="搜索" 
+              className="bg-transparent border-none outline-none text-sm text-white placeholder:text-white/40 w-full"
+            />
+          </div>
+        </div>
+
+        <div className="mt-2">
+          {sortedGroups.map(group => (
+            <div key={group.letter}>
+              <div className="px-4 py-1 bg-white/5 text-white/40 text-xs font-medium">
+                {group.letter}
+              </div>
+              <div className="px-4">
+                {group.items.map((contact) => {
+                  const isAlreadyInChat = chats.some(c => c.id === contact.id);
+                  return (
+                    <div 
+                      key={contact.id} 
+                      onClick={() => !isAlreadyInChat && onSelect(contact)}
+                      className={`flex items-center gap-3 py-3 transition-colors group ${isAlreadyInChat ? 'opacity-40 cursor-not-allowed' : 'active:bg-white/5 cursor-pointer'}`}
+                    >
+                      <Avatar src={contact.avatar} name={contact.name} size="sm" />
+                      <div className="flex-1 min-w-0 border-b border-white/5 pb-3 pt-1 group-last:border-none flex justify-between items-center">
+                        <h3 className="text-[15px] font-medium text-white/90 truncate mt-1">{contact.name}</h3>
+                        {isAlreadyInChat && <span className="text-xs text-white/40">已添加</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </motion.div>
   );
