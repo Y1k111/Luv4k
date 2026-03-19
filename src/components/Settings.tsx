@@ -3,12 +3,15 @@ import { motion } from 'motion/react';
 import { ChevronLeft, RefreshCw, Save, Check, AlertCircle, Key, Link as LinkIcon, Box, Thermometer, Bookmark, Plus, X } from 'lucide-react';
 
 export default function Settings({ onBack }: { onBack: () => void, key?: string }) {
+  const [apiProvider, setApiProvider] = useState<'gemini' | 'custom'>(
+    (localStorage.getItem('ai_api_provider') as 'gemini' | 'custom') || 'gemini'
+  );
   const [apiUrl, setApiUrl] = useState(localStorage.getItem('ai_api_url') || 'https://api.openai.com');
   const [apiKey, setApiKey] = useState(localStorage.getItem('ai_api_key') || '');
   const [selectedModel, setSelectedModel] = useState(localStorage.getItem('ai_model') || '');
   const [temperature, setTemperature] = useState(parseFloat(localStorage.getItem('ai_temperature') || '0.7'));
   
-  const [presets, setPresets] = useState<{id: string, name: string, url: string, key: string}[]>(() => {
+  const [presets, setPresets] = useState<{id: string, name: string, provider?: string, url: string, key: string}[]>(() => {
     try { return JSON.parse(localStorage.getItem('ai_api_presets') || '[]'); } catch { return []; }
   });
   const [showPresetInput, setShowPresetInput] = useState(false);
@@ -35,6 +38,7 @@ export default function Settings({ onBack }: { onBack: () => void, key?: string 
     const newPreset = {
       id: Date.now().toString(),
       name: newPresetName,
+      provider: apiProvider,
       url: apiUrl,
       key: apiKey
     };
@@ -48,6 +52,7 @@ export default function Settings({ onBack }: { onBack: () => void, key?: string 
   const handleLoadPreset = (id: string) => {
     const p = presets.find(x => x.id === id);
     if (p) {
+      if (p.provider) setApiProvider(p.provider as 'gemini' | 'custom');
       setApiUrl(p.url);
       setApiKey(p.key);
     }
@@ -60,6 +65,13 @@ export default function Settings({ onBack }: { onBack: () => void, key?: string 
   };
 
   const fetchModels = async () => {
+    if (apiProvider === 'gemini') {
+      setModels([{ id: 'gemini-3.1-pro-preview' }, { id: 'gemini-3.1-flash-preview' }, { id: 'gemini-2.5-flash' }, { id: 'gemini-2.5-pro' }]);
+      if (!selectedModel) setSelectedModel('gemini-3.1-pro-preview');
+      setStatus('success');
+      return;
+    }
+
     if (!apiUrl || !apiKey) {
       setStatus('error');
       setErrorMsg('请先填写 API 地址和密钥');
@@ -104,6 +116,7 @@ export default function Settings({ onBack }: { onBack: () => void, key?: string 
   };
 
   const handleSave = () => {
+    localStorage.setItem('ai_api_provider', apiProvider);
     localStorage.setItem('ai_api_url', apiUrl);
     localStorage.setItem('ai_api_key', apiKey);
     localStorage.setItem('ai_model', selectedModel);
@@ -177,32 +190,64 @@ export default function Settings({ onBack }: { onBack: () => void, key?: string 
               )}
             </div>
 
-            {/* API URL */}
-            <div className="p-4 space-y-2">
+            {/* API Provider Toggle */}
+            <div className="p-4 space-y-3">
               <label className="flex items-center gap-2 text-sm font-medium text-white/80">
-                <LinkIcon size={16} className="text-indigo-400" />
-                API 地址 (Base URL)
+                <Box size={16} className="text-blue-400" />
+                API 提供商
               </label>
-              <input 
-                type="text" 
-                value={apiUrl}
-                onChange={(e) => setApiUrl(e.target.value)}
-                placeholder="https://api.openai.com"
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-indigo-500/50 focus:bg-indigo-500/5 transition-all"
-              />
+              <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
+                <button
+                  onClick={() => setApiProvider('gemini')}
+                  className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
+                    apiProvider === 'gemini' 
+                      ? 'bg-indigo-500/20 text-indigo-300 shadow-sm' 
+                      : 'text-white/50 hover:text-white/80'
+                  }`}
+                >
+                  Google Gemini
+                </button>
+                <button
+                  onClick={() => setApiProvider('custom')}
+                  className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
+                    apiProvider === 'custom' 
+                      ? 'bg-emerald-500/20 text-emerald-300 shadow-sm' 
+                      : 'text-white/50 hover:text-white/80'
+                  }`}
+                >
+                  New API (自定义)
+                </button>
+              </div>
             </div>
 
+            {/* API URL (Only show for custom) */}
+            {apiProvider === 'custom' && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="p-4 space-y-2 border-t border-white/5">
+                <label className="flex items-center gap-2 text-sm font-medium text-white/80">
+                  <LinkIcon size={16} className="text-indigo-400" />
+                  API 地址 (Base URL)
+                </label>
+                <input 
+                  type="text" 
+                  value={apiUrl}
+                  onChange={(e) => setApiUrl(e.target.value)}
+                  placeholder="https://api.openai.com"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-indigo-500/50 focus:bg-indigo-500/5 transition-all"
+                />
+              </motion.div>
+            )}
+
             {/* API Key */}
-            <div className="p-4 space-y-2">
+            <div className="p-4 space-y-2 border-t border-white/5">
               <label className="flex items-center gap-2 text-sm font-medium text-white/80">
                 <Key size={16} className="text-amber-400" />
-                密钥 (API Key)
+                {apiProvider === 'gemini' ? 'Gemini API Key' : '自定义 API Key'}
               </label>
               <input 
                 type="password" 
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-..."
+                placeholder={apiProvider === 'gemini' ? "AI Studio 默认已配置，可留空" : "sk-..."}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-indigo-500/50 focus:bg-indigo-500/5 transition-all"
               />
             </div>

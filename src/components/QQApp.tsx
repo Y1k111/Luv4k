@@ -499,19 +499,46 @@ function AddPersonaView({ onBack, onComplete }: { onBack: () => void, onComplete
     if (asNewFriend) {
       setIsGenerating(true);
       try {
+        const apiProvider = localStorage.getItem('ai_api_provider') || 'gemini';
         const apiKey = localStorage.getItem('ai_api_key') || process.env.GEMINI_API_KEY;
+        const apiUrl = localStorage.getItem('ai_api_url') || 'https://api.openai.com';
         const model = localStorage.getItem('ai_model') || 'gemini-3.1-pro-preview';
+        const temperature = parseFloat(localStorage.getItem('ai_temperature') || '0.7');
         
-        if (!apiKey) {
+        if (!apiKey && apiProvider === 'gemini') {
           greeting = `你好，我是${name}！`; // Fallback
         } else {
-          // Initialize Gemini API
-          const ai = new GoogleGenAI({ apiKey });
-          const response = await ai.models.generateContent({
-            model: model,
-            contents: `你是一个新添加好友的AI，你的名字是${name}。你的人设是：${details}。请根据你的人设，生成一句不超过15个字的打招呼内容，表现出你是第一次和用户加上联系方式。`,
-          });
-          greeting = response.text || `你好，我是${name}！`;
+          const prompt = `你是一个新添加好友的AI，你的名字是${name}。你的人设是：${details}。请根据你的人设，生成一句不超过15个字的打招呼内容，表现出你是第一次和用户加上联系方式。`;
+          
+          if (apiProvider === 'gemini') {
+            // Initialize Gemini API
+            const ai = new GoogleGenAI({ apiKey: apiKey! });
+            const response = await ai.models.generateContent({
+              model: model,
+              contents: prompt,
+              config: { temperature }
+            });
+            greeting = response.text || `你好，我是${name}！`;
+          } else {
+            // Custom API (OpenAI compatible)
+            const baseUrl = apiUrl.replace(/\/$/, '');
+            const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+              },
+              body: JSON.stringify({
+                model: model,
+                messages: [{ role: 'user', content: prompt }],
+                temperature: temperature
+              })
+            });
+            
+            if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+            const data = await res.json();
+            greeting = data.choices?.[0]?.message?.content || `你好，我是${name}！`;
+          }
         }
       } catch (error) {
         console.error('Failed to generate greeting:', error);
@@ -823,10 +850,13 @@ function ChatView({ chat, onBack, onUpdateChat }: { chat: Chat, onBack: () => vo
     setIsTyping(true);
 
     try {
+      const apiProvider = localStorage.getItem('ai_api_provider') || 'gemini';
       const apiKey = localStorage.getItem('ai_api_key') || process.env.GEMINI_API_KEY;
+      const apiUrl = localStorage.getItem('ai_api_url') || 'https://api.openai.com';
       const model = localStorage.getItem('ai_model') || 'gemini-3.1-pro-preview';
+      const temperature = parseFloat(localStorage.getItem('ai_temperature') || '0.7');
       
-      if (!apiKey) {
+      if (!apiKey && apiProvider === 'gemini') {
         setTimeout(() => {
           setMessages(prev => [...prev, {
             id: Date.now().toString(),
@@ -839,11 +869,10 @@ function ChatView({ chat, onBack, onUpdateChat }: { chat: Chat, onBack: () => vo
         return;
       }
 
-      const ai = new GoogleGenAI({ apiKey });
+      const userPersonaDetails = localStorage.getItem('userPersonaDetails') || '';
+      const userNickname = localStorage.getItem('userNickname') || '用户';
       
       if (!chat.nickname || !chat.displayId) {
-        const userPersonaDetails = localStorage.getItem('userPersonaDetails') || '';
-        const userNickname = localStorage.getItem('userNickname') || '用户';
         const prompt = `你是一个AI，你的备注名是"${chat.name}"，你的人设是：${chat.persona || '一个乐于助人的AI助手'}。
 用户（昵称：${userNickname}，人设：${userPersonaDetails || '无'}）刚才对你说："${userText}"。
 请根据你的人设回复用户。同时，为你自己生成一个符合人设的网名（昵称）和一个6到15位的数字、字母或下划线组成的ID。
@@ -853,15 +882,40 @@ function ChatView({ chat, onBack, onUpdateChat }: { chat: Chat, onBack: () => vo
   "nickname": "生成的昵称",
   "id": "生成的ID"
 }`;
-        const response = await ai.models.generateContent({
-          model: model,
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-          }
-        });
+
+        let responseText = '';
+        if (apiProvider === 'gemini') {
+          const ai = new GoogleGenAI({ apiKey: apiKey! });
+          const response = await ai.models.generateContent({
+            model: model,
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+              temperature
+            }
+          });
+          responseText = response.text || '{}';
+        } else {
+          const baseUrl = apiUrl.replace(/\/$/, '');
+          const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+              model: model,
+              messages: [{ role: 'user', content: prompt }],
+              temperature: temperature,
+              response_format: { type: "json_object" }
+            })
+          });
+          if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+          const data = await res.json();
+          responseText = data.choices?.[0]?.message?.content || '{}';
+        }
         
-        const data = JSON.parse(response.text || '{}');
+        const data = JSON.parse(responseText);
         
         setMessages(prev => [...prev, {
           id: Date.now().toString(),
@@ -875,19 +929,41 @@ function ChatView({ chat, onBack, onUpdateChat }: { chat: Chat, onBack: () => vo
           displayId: data.id || Math.floor(100000 + Math.random() * 900000).toString() 
         });
       } else {
-        const userPersonaDetails = localStorage.getItem('userPersonaDetails') || '';
-        const userNickname = localStorage.getItem('userNickname') || '用户';
         const prompt = `你是一个AI，你的名字是"${chat.name}"，昵称是"${chat.nickname}"，你的人设是：${chat.persona || '一个乐于助人的AI助手'}。
 用户（昵称：${userNickname}，人设：${userPersonaDetails || '无'}）刚才对你说："${userText}"。
 请根据你的人设回复用户。`;
-        const response = await ai.models.generateContent({
-          model: model,
-          contents: prompt,
-        });
+
+        let responseText = '';
+        if (apiProvider === 'gemini') {
+          const ai = new GoogleGenAI({ apiKey: apiKey! });
+          const response = await ai.models.generateContent({
+            model: model,
+            contents: prompt,
+            config: { temperature }
+          });
+          responseText = response.text || '...';
+        } else {
+          const baseUrl = apiUrl.replace(/\/$/, '');
+          const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+              model: model,
+              messages: [{ role: 'user', content: prompt }],
+              temperature: temperature
+            })
+          });
+          if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+          const data = await res.json();
+          responseText = data.choices?.[0]?.message?.content || '...';
+        }
         
         setMessages(prev => [...prev, {
           id: Date.now().toString(),
-          text: response.text || '...',
+          text: responseText,
           isSelf: false,
           time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
         }]);
