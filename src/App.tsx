@@ -18,6 +18,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import SettingsApp from './components/Settings';
+import QQApp from './components/QQApp';
 
 export default function App() {
   const [time, setTime] = useState(new Date());
@@ -193,6 +194,10 @@ export default function App() {
 
             {activeApp === 'settings' && (
               <SettingsApp key="settings" onBack={() => setActiveApp('home')} />
+            )}
+
+            {activeApp === 'qq' && (
+              <QQApp key="qq" onBack={() => setActiveApp('home')} />
             )}
           </AnimatePresence>
         </div>

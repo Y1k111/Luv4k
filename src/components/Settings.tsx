@@ -1,11 +1,19 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ChevronLeft, RefreshCw, Save, Check, AlertCircle, Key, Link as LinkIcon, Box } from 'lucide-react';
+import { ChevronLeft, RefreshCw, Save, Check, AlertCircle, Key, Link as LinkIcon, Box, Thermometer, Bookmark, Plus, X } from 'lucide-react';
 
-export default function Settings({ onBack }: { onBack: () => void }) {
+export default function Settings({ onBack }: { onBack: () => void, key?: string }) {
   const [apiUrl, setApiUrl] = useState(localStorage.getItem('ai_api_url') || 'https://api.openai.com');
   const [apiKey, setApiKey] = useState(localStorage.getItem('ai_api_key') || '');
   const [selectedModel, setSelectedModel] = useState(localStorage.getItem('ai_model') || '');
+  const [temperature, setTemperature] = useState(parseFloat(localStorage.getItem('ai_temperature') || '0.7'));
+  
+  const [presets, setPresets] = useState<{id: string, name: string, url: string, key: string}[]>(() => {
+    try { return JSON.parse(localStorage.getItem('ai_api_presets') || '[]'); } catch { return []; }
+  });
+  const [showPresetInput, setShowPresetInput] = useState(false);
+  const [newPresetName, setNewPresetName] = useState('');
+
   const [models, setModels] = useState<{id: string}[]>([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -22,6 +30,35 @@ export default function Settings({ onBack }: { onBack: () => void }) {
     }
   }, []);
 
+  const handleSavePreset = () => {
+    if (!newPresetName.trim()) return;
+    const newPreset = {
+      id: Date.now().toString(),
+      name: newPresetName,
+      url: apiUrl,
+      key: apiKey
+    };
+    const updated = [...presets, newPreset];
+    setPresets(updated);
+    localStorage.setItem('ai_api_presets', JSON.stringify(updated));
+    setNewPresetName('');
+    setShowPresetInput(false);
+  };
+
+  const handleLoadPreset = (id: string) => {
+    const p = presets.find(x => x.id === id);
+    if (p) {
+      setApiUrl(p.url);
+      setApiKey(p.key);
+    }
+  };
+
+  const handleDeletePreset = (id: string) => {
+    const updated = presets.filter(x => x.id !== id);
+    setPresets(updated);
+    localStorage.setItem('ai_api_presets', JSON.stringify(updated));
+  };
+
   const fetchModels = async () => {
     if (!apiUrl || !apiKey) {
       setStatus('error');
@@ -33,10 +70,7 @@ export default function Settings({ onBack }: { onBack: () => void }) {
     setStatus('idle');
     
     try {
-      // Remove trailing slash if present
       const baseUrl = apiUrl.replace(/\/$/, '');
-      
-      // Standard OpenAI-compatible /v1/models endpoint
       const res = await fetch(`${baseUrl}/v1/models`, {
         headers: {
           'Authorization': `Bearer ${apiKey}`
@@ -55,7 +89,6 @@ export default function Settings({ onBack }: { onBack: () => void }) {
         localStorage.setItem('ai_models_cache', JSON.stringify(fetchedModels));
         setStatus('success');
         
-        // Auto-select the first model if none is selected
         if (fetchedModels.length > 0 && !selectedModel) {
           setSelectedModel(fetchedModels[0].id);
         }
@@ -74,6 +107,7 @@ export default function Settings({ onBack }: { onBack: () => void }) {
     localStorage.setItem('ai_api_url', apiUrl);
     localStorage.setItem('ai_api_key', apiKey);
     localStorage.setItem('ai_model', selectedModel);
+    localStorage.setItem('ai_temperature', temperature.toString());
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -91,17 +125,58 @@ export default function Settings({ onBack }: { onBack: () => void }) {
           <ChevronLeft size={24} />
         </button>
         <h1 className="text-base font-medium tracking-wide">设置</h1>
-        <div className="w-10"></div> {/* Spacer for centering */}
+        <div className="w-10"></div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-8 pb-12">
+      <div className="flex-1 overflow-y-auto p-5 space-y-6 pb-12 scrollbar-hide">
         
         {/* API Config Section */}
         <div className="space-y-3">
           <h2 className="text-[11px] font-semibold text-white/40 uppercase tracking-widest ml-1">API 配置</h2>
           
           <div className="bg-neutral-900/80 backdrop-blur-sm border border-white/5 rounded-3xl overflow-hidden divide-y divide-white/5 shadow-xl">
+            
+            {/* Presets */}
+            <div className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-sm font-medium text-white/80">
+                  <Bookmark size={16} className="text-emerald-400" />
+                  API 预设
+                </label>
+                <button onClick={() => setShowPresetInput(!showPresetInput)} className="text-xs text-indigo-400 flex items-center gap-1 hover:text-indigo-300">
+                  <Plus size={14}/> 新增
+                </button>
+              </div>
+              
+              {showPresetInput ? (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="flex gap-2">
+                  <input 
+                    value={newPresetName} 
+                    onChange={e => setNewPresetName(e.target.value)} 
+                    placeholder="预设名称..." 
+                    className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500/50"
+                    autoFocus
+                  />
+                  <button onClick={handleSavePreset} className="bg-indigo-600 hover:bg-indigo-500 px-3 py-2 rounded-xl text-xs font-medium transition-colors">保存</button>
+                  <button onClick={() => setShowPresetInput(false)} className="bg-white/10 hover:bg-white/20 px-3 py-2 rounded-xl text-xs font-medium transition-colors">取消</button>
+                </motion.div>
+              ) : (
+                presets.length > 0 ? (
+                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                    {presets.map(p => (
+                      <div key={p.id} className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-xl pl-3 pr-1 py-1.5 whitespace-nowrap shrink-0">
+                        <button onClick={() => handleLoadPreset(p.id)} className="text-xs text-white/80 hover:text-white font-medium">{p.name}</button>
+                        <button onClick={() => handleDeletePreset(p.id)} className="p-1 text-white/30 hover:text-red-400 rounded-lg transition-colors"><X size={12}/></button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-white/30 italic">暂无预设，点击右上角新增</div>
+                )
+              )}
+            </div>
+
             {/* API URL */}
             <div className="p-4 space-y-2">
               <label className="flex items-center gap-2 text-sm font-medium text-white/80">
@@ -177,7 +252,6 @@ export default function Settings({ onBack }: { onBack: () => void }) {
                   {models.map(m => (
                     <option key={m.id} value={m.id}>{m.id}</option>
                   ))}
-                  {/* Fallback if models list is empty but user typed one previously */}
                   {selectedModel && !models.find(m => m.id === selectedModel) && (
                     <option value={selectedModel}>{selectedModel}</option>
                   )}
@@ -190,8 +264,39 @@ export default function Settings({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
+        {/* Advanced Section (Temperature) */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between ml-1">
+            <h2 className="text-[11px] font-semibold text-white/40 uppercase tracking-widest">高级设置</h2>
+          </div>
+          <div className="bg-neutral-900/80 backdrop-blur-sm border border-white/5 rounded-3xl p-4 shadow-xl space-y-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-sm font-medium text-white/80">
+                  <Thermometer size={16} className="text-orange-400" />
+                  温度 (Temperature)
+                </label>
+                <span className="text-xs font-mono text-white/50 bg-black/40 px-2 py-1 rounded-md border border-white/5">
+                  {temperature.toFixed(1)}
+                </span>
+              </div>
+              <input 
+                type="range" 
+                min="0" max="2" step="0.1" 
+                value={temperature}
+                onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                className="w-full accent-indigo-500 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:rounded-full"
+              />
+              <div className="flex justify-between text-[10px] text-white/40 px-1">
+                <span>严谨准确 (0.0)</span>
+                <span>发散创造 (2.0)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Save Button */}
-        <div className="pt-4">
+        <div className="pt-2">
           <button 
             onClick={handleSave}
             className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-medium py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/25 active:scale-[0.98]"
