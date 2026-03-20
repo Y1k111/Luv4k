@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   ChevronLeft, MessageCircle, Users, CircleDashed, User, 
   Search, Edit, Camera, UserPlus, Tags, ChevronRight, BookOpen,
-  Send, Image as ImageIcon, Mic, Plus as PlusIcon, X, Check, Video
+  Send, Image as ImageIcon, Mic, Plus as PlusIcon, X, Check, Video,
+  Wallet, Star, Edit2, FileText, RefreshCw
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
@@ -43,6 +44,70 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [showNewFriends, setShowNewFriends] = useState(false);
   const [showNewChat, setShowNewChat] = useState(false);
+
+  const [accounts, setAccounts] = useState<any[]>(() => {
+    const saved = localStorage.getItem('qq_accounts');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    const oldProfile = localStorage.getItem('qq_user_profile');
+    if (oldProfile) {
+      try {
+        const p = JSON.parse(oldProfile);
+        return [{ ...p, id: 'default', personaDetails: localStorage.getItem('userPersonaDetails') || '' }];
+      } catch (e) {}
+    }
+    return [{
+      id: 'default',
+      name: 'User',
+      qqId: '12345678',
+      avatar: 'https://picsum.photos/seed/user/200/200',
+      background: 'https://picsum.photos/seed/bg/600/400',
+      statusIcon: '👋',
+      statusText: 'Hello World',
+      personaDetails: ''
+    }];
+  });
+
+  const [activeAccountId, setActiveAccountId] = useState(() => {
+    return localStorage.getItem('qq_active_account_id') || 'default';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('qq_accounts', JSON.stringify(accounts));
+  }, [accounts]);
+
+  useEffect(() => {
+    localStorage.setItem('qq_active_account_id', activeAccountId);
+  }, [activeAccountId]);
+
+  const activeAccount = accounts.find(a => a.id === activeAccountId) || accounts[0];
+
+  const updateActiveAccount = (updates: any) => {
+    setAccounts(prev => prev.map(a => a.id === activeAccount.id ? { ...a, ...updates } : a));
+  };
+
+  const switchAccount = (id: string) => {
+    setActiveAccountId(id);
+  };
+
+  const createAccount = () => {
+    const newId = Date.now().toString();
+    const newAcc = {
+      id: newId,
+      name: `User_${newId.slice(-4)}`,
+      qqId: Math.floor(Math.random() * 100000000).toString(),
+      avatar: `https://picsum.photos/seed/${newId}/200/200`,
+      background: `https://picsum.photos/seed/bg_${newId}/600/400`,
+      statusIcon: '✨',
+      statusText: 'New Account',
+      personaDetails: ''
+    };
+    setAccounts(prev => [...prev, newAcc]);
+    setActiveAccountId(newId);
+  };
 
   const [chats, setChats] = useState<Chat[]>([
     { id: '1', name: 'AI 助手 (GPT-4)', message: '我已经准备好协助你了。', time: '14:20', unread: 3, avatar: 'bg-gradient-to-br from-indigo-500 to-purple-500' },
@@ -309,7 +374,7 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
             )}
             
             {/* Other tabs placeholders */}
-            {(activeTab === 'discover' || activeTab === 'me') && (
+            {activeTab === 'discover' && (
               <motion.div 
                 key="other"
                 initial={{ opacity: 0, x: -10 }}
@@ -319,11 +384,21 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
                 className="flex flex-col items-center justify-center h-full text-white/30"
               >
                 <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
-                  {activeTab === 'discover' && <CircleDashed size={32} className="text-white/20" />}
-                  {activeTab === 'me' && <User size={32} className="text-white/20" />}
+                  <CircleDashed size={32} className="text-white/20" />
                 </div>
                 <p className="text-sm font-medium">内容开发中...</p>
               </motion.div>
+            )}
+
+            {activeTab === 'me' && (
+              <MeTab 
+                profile={activeAccount} 
+                onUpdateProfile={updateActiveAccount} 
+                accounts={accounts}
+                activeAccountId={activeAccountId}
+                onSwitchAccount={switchAccount}
+                onCreateAccount={createAccount}
+              />
             )}
           </AnimatePresence>
         </div>
@@ -391,6 +466,11 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
             chat={activeChat} 
             onBack={() => setActiveChat(null)} 
             onUpdateChat={handleUpdateChat}
+            accounts={accounts}
+            activeAccountId={activeAccountId}
+            onSwitchAccount={switchAccount}
+            onCreateAccount={createAccount}
+            onUpdateActiveAccount={updateActiveAccount}
           />
         )}
       </AnimatePresence>
@@ -833,7 +913,7 @@ function NewChatView({ contacts, chats, onBack, onSelect }: { contacts: Contact[
   );
 }
 
-function ChatView({ chat, onBack, onUpdateChat }: { chat: Chat, onBack: () => void, onUpdateChat: (id: string, updates: Partial<Chat>) => void, key?: string }) {
+function ChatView({ chat, onBack, onUpdateChat, accounts, activeAccountId, onSwitchAccount, onCreateAccount, onUpdateActiveAccount }: { chat: Chat, onBack: () => void, onUpdateChat: (id: string, updates: Partial<Chat>) => void, accounts: any[], activeAccountId: string, onSwitchAccount: (id: string) => void, onCreateAccount: () => void, onUpdateActiveAccount: (updates: any) => void, key?: string }) {
   const [messages, setMessages] = useState([
     { id: '1', text: chat.message, isSelf: false, time: chat.time }
   ]);
@@ -874,8 +954,9 @@ function ChatView({ chat, onBack, onUpdateChat }: { chat: Chat, onBack: () => vo
         return;
       }
 
-      const userPersonaDetails = localStorage.getItem('userPersonaDetails') || '';
-      const userNickname = localStorage.getItem('userNickname') || '用户';
+      const activeAccount = accounts.find(a => a.id === activeAccountId) || accounts[0];
+      const userPersonaDetails = activeAccount.personaDetails || '';
+      const userNickname = activeAccount.name || '用户';
       
       if (!chat.nickname || !chat.displayId) {
         const prompt = `你是一个AI，你的备注名是"${chat.name}"，你的人设是：${chat.persona || '一个乐于助人的AI助手'}。
@@ -1023,13 +1104,22 @@ function ChatView({ chat, onBack, onUpdateChat }: { chat: Chat, onBack: () => vo
           {messages.map(msg => (
             <div key={msg.id} className={`flex ${msg.isSelf ? 'justify-end' : 'justify-start'} mb-4`}>
               {!msg.isSelf && (
-                <div className="mr-2 mt-1">
+                <div className="mr-2 mt-1 shrink-0">
                   <Avatar src={chat.avatar} name={chat.name} size="sm" />
                 </div>
               )}
               <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${msg.isSelf ? 'bg-indigo-500 text-white rounded-tr-sm' : 'bg-neutral-800 text-white/90 rounded-tl-sm'}`}>
                 <p className="text-[15px] leading-relaxed break-words">{msg.text}</p>
               </div>
+              {msg.isSelf && (
+                <div className="ml-2 mt-1 shrink-0">
+                  <Avatar 
+                    src={(accounts.find(a => a.id === activeAccountId) || accounts[0]).avatar} 
+                    name={(accounts.find(a => a.id === activeAccountId) || accounts[0]).name} 
+                    size="sm" 
+                  />
+                </div>
+              )}
             </div>
           ))}
           {isTyping && (
@@ -1091,6 +1181,11 @@ function ChatView({ chat, onBack, onUpdateChat }: { chat: Chat, onBack: () => vo
             onBack={() => setShowSettings(false)} 
             onUpdateChat={onUpdateChat}
             onClearHistory={() => setMessages([])}
+            accounts={accounts}
+            activeAccountId={activeAccountId}
+            onSwitchAccount={onSwitchAccount}
+            onCreateAccount={onCreateAccount}
+            onUpdateActiveAccount={onUpdateActiveAccount}
           />
         )}
       </AnimatePresence>
@@ -1098,18 +1193,27 @@ function ChatView({ chat, onBack, onUpdateChat }: { chat: Chat, onBack: () => vo
   );
 }
 
-function ChatSettingsView({ chat, onBack, onUpdateChat, onClearHistory }: { chat: Chat, onBack: () => void, onUpdateChat: (id: string, updates: Partial<Chat>) => void, onClearHistory: () => void }) {
+function ChatSettingsView({ chat, onBack, onUpdateChat, onClearHistory, accounts, activeAccountId, onSwitchAccount, onCreateAccount, onUpdateActiveAccount }: { chat: Chat, onBack: () => void, onUpdateChat: (id: string, updates: Partial<Chat>) => void, onClearHistory: () => void, accounts: any[], activeAccountId: string, onSwitchAccount: (id: string) => void, onCreateAccount: () => void, onUpdateActiveAccount: (updates: any) => void }) {
   const [name, setName] = useState(chat.name || '');
   const [nickname, setNickname] = useState(chat.nickname || '');
   const [displayId, setDisplayId] = useState(chat.displayId || '');
   const [isPinned, setIsPinned] = useState(chat.isPinned || false);
   const [isDnd, setIsDnd] = useState(false);
   const [background, setBackground] = useState(chat.background || '');
+  const [showAccountSwitch, setShowAccountSwitch] = useState(false);
   
-  const [userAvatar, setUserAvatar] = useState(localStorage.getItem('userAvatar') || '');
-  const [userNickname, setUserNickname] = useState(localStorage.getItem('userNickname') || '');
-  const [userId, setUserId] = useState(localStorage.getItem('userId') || '');
-  const [userPersonaDetails, setUserPersonaDetails] = useState(localStorage.getItem('userPersonaDetails') || '');
+  const activeAccount = accounts.find(a => a.id === activeAccountId) || accounts[0];
+  const [userAvatar, setUserAvatar] = useState(activeAccount.avatar);
+  const [userNickname, setUserNickname] = useState(activeAccount.name);
+  const [userId, setUserId] = useState(activeAccount.qqId);
+  const [userPersonaDetails, setUserPersonaDetails] = useState(activeAccount.personaDetails || '');
+
+  useEffect(() => {
+    setUserAvatar(activeAccount.avatar);
+    setUserNickname(activeAccount.name);
+    setUserId(activeAccount.qqId);
+    setUserPersonaDetails(activeAccount.personaDetails || '');
+  }, [activeAccountId, activeAccount]);
 
   const bgInputRef = useRef<HTMLInputElement>(null);
   const userAvatarInputRef = useRef<HTMLInputElement>(null);
@@ -1132,10 +1236,12 @@ function ChatSettingsView({ chat, onBack, onUpdateChat, onClearHistory }: { chat
       background
     });
 
-    localStorage.setItem('userAvatar', userAvatar);
-    localStorage.setItem('userNickname', userNickname);
-    localStorage.setItem('userId', userId);
-    localStorage.setItem('userPersonaDetails', userPersonaDetails);
+    onUpdateActiveAccount({
+      avatar: userAvatar,
+      name: userNickname,
+      qqId: userId,
+      personaDetails: userPersonaDetails
+    });
 
     alert('设置已保存');
     onBack();
@@ -1281,7 +1387,16 @@ function ChatSettingsView({ chat, onBack, onUpdateChat, onClearHistory }: { chat
 
         {/* User Persona */}
         <div className="bg-neutral-900/60 border border-white/5 rounded-2xl p-4 shadow-lg space-y-4">
-          <span className="text-sm text-white/80 font-medium block">用户人设 (AI读取)</span>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-white/80 font-medium block">用户人设 (AI读取)</span>
+            <button 
+              onClick={() => setShowAccountSwitch(true)}
+              className="text-xs text-indigo-400 hover:text-indigo-300 px-2 py-1 rounded bg-indigo-500/10 flex items-center gap-1"
+            >
+              <RefreshCw size={12} />
+              切换预设
+            </button>
+          </div>
           
           <div className="flex items-center gap-4">
             <div 
@@ -1352,6 +1467,384 @@ function ChatSettingsView({ chat, onBack, onUpdateChat, onClearHistory }: { chat
           </button>
         </div>
       </div>
+
+      <AccountSwitchSheet 
+        isOpen={showAccountSwitch} 
+        onClose={() => setShowAccountSwitch(false)} 
+        accounts={accounts} 
+        activeAccountId={activeAccountId} 
+        onSwitchAccount={onSwitchAccount} 
+        onCreateAccount={onCreateAccount} 
+      />
     </motion.div>
+  );
+}
+
+function ImageEditModal({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: () => void, onSave: (url: string) => void }) {
+  const [url, setUrl] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  if (!isOpen) return null;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          onSave(event.target.result as string);
+          onClose();
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-neutral-900 border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl"
+      >
+        <h3 className="text-lg font-medium text-white mb-4">更换图片</h3>
+        <input 
+          type="text" 
+          placeholder="输入图片 URL..." 
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 mb-4 outline-none focus:border-indigo-500 transition-colors"
+        />
+        <div className="flex gap-3">
+          <button 
+            onClick={() => {
+              if (url) {
+                onSave(url);
+                onClose();
+              }
+            }}
+            className="flex-1 bg-indigo-500 text-white rounded-xl py-3 font-medium hover:bg-indigo-600 transition-colors"
+          >
+            保存 URL
+          </button>
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="flex-1 bg-white/10 text-white rounded-xl py-3 font-medium hover:bg-white/20 transition-colors"
+          >
+            上传本地
+          </button>
+        </div>
+        <button onClick={onClose} className="w-full mt-3 py-3 text-white/50 hover:text-white transition-colors">取消</button>
+        <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
+      </motion.div>
+    </div>
+  );
+}
+
+function TextInputModal({ isOpen, title, initialValue, onClose, onSave }: { isOpen: boolean, title: string, initialValue: string, onClose: () => void, onSave: (val: string) => void }) {
+  const [val, setVal] = useState(initialValue);
+  
+  useEffect(() => {
+    if (isOpen) setVal(initialValue);
+  }, [isOpen, initialValue]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-neutral-900 border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl"
+      >
+        <h3 className="text-lg font-medium text-white mb-4">{title}</h3>
+        <input 
+          type="text" 
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 mb-4 outline-none focus:border-indigo-500 transition-colors"
+          autoFocus
+        />
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 py-3 text-white/70 hover:text-white bg-white/5 rounded-xl transition-colors">取消</button>
+          <button onClick={() => { onSave(val); onClose(); }} className="flex-1 bg-indigo-500 text-white rounded-xl py-3 font-medium hover:bg-indigo-600 transition-colors">保存</button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function MeTab({ profile, onUpdateProfile, accounts, activeAccountId, onSwitchAccount, onCreateAccount }: { profile: any, onUpdateProfile: (updates: any) => void, accounts: any[], activeAccountId: string, onSwitchAccount: (id: string) => void, onCreateAccount: () => void }) {
+  const [imageModalTarget, setImageModalTarget] = useState<'avatar' | 'background' | null>(null);
+  const [textModalConfig, setTextModalConfig] = useState<{ target: string, title: string, value: string } | null>(null);
+  const [showPersonaSheet, setShowPersonaSheet] = useState(false);
+  const [showAccountSwitch, setShowAccountSwitch] = useState(false);
+
+  return (
+    <motion.div 
+      key="me"
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 10 }}
+      transition={{ duration: 0.2 }}
+      className="h-full flex flex-col pb-[max(env(safe-area-inset-bottom),2rem)] overflow-y-auto scrollbar-hide"
+    >
+      {/* Background Card */}
+      <div className="relative h-64 w-full rounded-b-[2.5rem] overflow-hidden shadow-2xl group shrink-0">
+        <img src={profile.background} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+        <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors"></div>
+        <button 
+          onClick={() => setImageModalTarget('background')}
+          className="absolute top-[max(env(safe-area-inset-top),1rem)] right-4 p-2.5 bg-black/30 rounded-full backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity text-white hover:bg-black/50"
+        >
+          <Camera size={20} />
+        </button>
+      </div>
+
+      {/* Avatar & Info */}
+      <div className="relative -mt-16 flex flex-col items-center px-6 shrink-0">
+        <div className="relative group">
+          <div className="w-32 h-32 rounded-full border-4 border-neutral-950 overflow-hidden shadow-xl bg-neutral-800">
+            <img src={profile.avatar} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+          </div>
+          <button 
+            onClick={() => setImageModalTarget('avatar')}
+            className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full"
+          >
+            <Camera size={28} className="text-white" />
+          </button>
+
+          {/* Status Bubble */}
+          <div 
+            className="absolute top-1 right-1 bg-neutral-800 border-4 border-neutral-950 rounded-full w-10 h-10 flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 transition-transform z-10"
+            onClick={() => setTextModalConfig({ target: 'statusIcon', title: '修改状态图标 (Emoji)', value: profile.statusIcon })}
+          >
+            <span className="text-lg leading-none">{profile.statusIcon}</span>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col items-center">
+          <h2 
+            className="text-2xl font-bold text-white flex items-center gap-2 cursor-pointer group"
+            onClick={() => setTextModalConfig({ target: 'name', title: '修改昵称', value: profile.name })}
+          >
+            {profile.name}
+            <Edit2 size={16} className="text-white/0 group-hover:text-white/40 transition-colors" />
+          </h2>
+          <p 
+            className="text-white/50 text-sm mt-1 flex items-center gap-2 cursor-pointer group"
+            onClick={() => setTextModalConfig({ target: 'qqId', title: '修改 ID', value: profile.qqId })}
+          >
+            ID: {profile.qqId}
+            <Edit2 size={12} className="text-white/0 group-hover:text-white/40 transition-colors" />
+          </p>
+        </div>
+        
+        {/* Status Text */}
+        <div 
+          className="mt-4 px-5 py-2 bg-white/5 rounded-full border border-white/5 cursor-pointer hover:bg-white/10 transition-colors flex items-center gap-2 group"
+          onClick={() => setTextModalConfig({ target: 'statusText', title: '修改状态签名', value: profile.statusText })}
+        >
+          <p className="text-sm text-white/80">{profile.statusText}</p>
+          <Edit2 size={12} className="text-white/0 group-hover:text-white/40 transition-colors" />
+        </div>
+      </div>
+
+      {/* Function Blocks */}
+      <div className="mt-8 px-4 space-y-3 shrink-0">
+        <div className="bg-white/5 rounded-2xl p-1 border border-white/5">
+          <div className="flex items-center gap-4 p-3 hover:bg-white/10 rounded-xl transition-colors cursor-pointer group">
+            <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform">
+              <Wallet size={20} />
+            </div>
+            <div className="flex-1 border-b border-white/5 pb-3 pt-1 flex justify-between items-center">
+              <h3 className="text-white/90 font-medium">钱包</h3>
+              <ChevronRight size={18} className="text-white/20" />
+            </div>
+          </div>
+          <div className="flex items-center gap-4 p-3 hover:bg-white/10 rounded-xl transition-colors cursor-pointer group">
+            <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 group-hover:scale-110 transition-transform">
+              <Star size={20} />
+            </div>
+            <div className="flex-1 pb-1 pt-1 flex justify-between items-center">
+              <h3 className="text-white/90 font-medium">收藏</h3>
+              <ChevronRight size={18} className="text-white/20" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* More Info & Switch Account Blocks */}
+      <div className="mt-4 px-4 space-y-3 shrink-0 mb-8">
+        <div className="bg-white/5 rounded-2xl p-1 border border-white/5">
+          <div 
+            onClick={() => setShowPersonaSheet(true)}
+            className="flex items-center gap-4 p-3 hover:bg-white/10 rounded-xl transition-colors cursor-pointer group"
+          >
+            <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform">
+              <FileText size={20} />
+            </div>
+            <div className="flex-1 border-b border-white/5 pb-3 pt-1 flex justify-between items-center">
+              <h3 className="text-white/90 font-medium">更多资料</h3>
+              <ChevronRight size={18} className="text-white/20" />
+            </div>
+          </div>
+          <div 
+            onClick={() => setShowAccountSwitch(true)}
+            className="flex items-center gap-4 p-3 hover:bg-white/10 rounded-xl transition-colors cursor-pointer group"
+          >
+            <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 group-hover:scale-110 transition-transform">
+              <RefreshCw size={20} />
+            </div>
+            <div className="flex-1 pb-1 pt-1 flex justify-between items-center">
+              <h3 className="text-white/90 font-medium">切换账号</h3>
+              <ChevronRight size={18} className="text-white/20" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Modals */}
+      <ImageEditModal 
+        isOpen={!!imageModalTarget} 
+        onClose={() => setImageModalTarget(null)} 
+        onSave={(url) => {
+          if (imageModalTarget) onUpdateProfile({ [imageModalTarget]: url });
+        }} 
+      />
+      <TextInputModal 
+        isOpen={!!textModalConfig} 
+        title={textModalConfig?.title || ''} 
+        initialValue={textModalConfig?.value || ''} 
+        onClose={() => setTextModalConfig(null)} 
+        onSave={(val) => {
+          if (textModalConfig) onUpdateProfile({ [textModalConfig.target]: val });
+        }} 
+      />
+      <PersonaBottomSheet 
+        isOpen={showPersonaSheet} 
+        onClose={() => setShowPersonaSheet(false)} 
+        initialValue={profile.personaDetails || ''} 
+        onSave={(val) => onUpdateProfile({ personaDetails: val })} 
+      />
+      <AccountSwitchSheet 
+        isOpen={showAccountSwitch} 
+        onClose={() => setShowAccountSwitch(false)} 
+        accounts={accounts} 
+        activeAccountId={activeAccountId} 
+        onSwitchAccount={onSwitchAccount} 
+        onCreateAccount={onCreateAccount} 
+      />
+    </motion.div>
+  );
+}
+
+function PersonaBottomSheet({ isOpen, onClose, initialValue, onSave }: { isOpen: boolean, onClose: () => void, initialValue: string, onSave: (val: string) => void }) {
+  const [value, setValue] = useState(initialValue);
+
+  useEffect(() => {
+    if (isOpen) setValue(initialValue);
+  }, [isOpen, initialValue]);
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/60 z-[60] backdrop-blur-sm"
+            onClick={onClose}
+          />
+          <motion.div 
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="absolute bottom-0 left-0 right-0 bg-neutral-900 rounded-t-3xl z-[60] flex flex-col h-[70vh]"
+          >
+            <div className="flex justify-between items-center p-4 border-b border-white/5">
+              <button onClick={onClose} className="text-white/50 hover:text-white p-2">取消</button>
+              <h3 className="text-white font-medium">详细人设</h3>
+              <button onClick={() => { onSave(value); onClose(); }} className="text-indigo-400 font-medium p-2">保存</button>
+            </div>
+            <div className="p-4 flex-1 overflow-y-auto pb-[max(env(safe-area-inset-bottom),2rem)]">
+              <textarea 
+                value={value}
+                onChange={e => setValue(e.target.value)}
+                placeholder="在这里详细描述你的性格、喜好、背景故事等，AI 会根据这些信息与你互动..."
+                className="w-full h-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white outline-none focus:border-indigo-500 resize-none"
+              />
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function AccountSwitchSheet({ isOpen, onClose, accounts, activeAccountId, onSwitchAccount, onCreateAccount }: { isOpen: boolean, onClose: () => void, accounts: any[], activeAccountId: string, onSwitchAccount: (id: string) => void, onCreateAccount: () => void }) {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/60 z-[60] backdrop-blur-sm"
+            onClick={onClose}
+          />
+          <motion.div 
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="absolute bottom-0 left-0 right-0 bg-neutral-900 rounded-t-3xl z-[60] flex flex-col max-h-[80vh]"
+          >
+            <div className="flex justify-between items-center p-4 border-b border-white/5 shrink-0">
+              <h3 className="text-white font-medium ml-2">切换账号预设</h3>
+              <button onClick={onClose} className="p-2 text-white/50 hover:text-white bg-white/5 rounded-full"><X size={20} /></button>
+            </div>
+            <div className="p-4 flex-1 overflow-y-auto space-y-3 pb-[max(env(safe-area-inset-bottom),2rem)]">
+              {accounts.map(acc => (
+                <div 
+                  key={acc.id}
+                  onClick={() => { onSwitchAccount(acc.id); onClose(); }}
+                  className={`flex items-center gap-4 p-4 rounded-2xl cursor-pointer transition-colors border ${activeAccountId === acc.id ? 'bg-indigo-500/10 border-indigo-500/50' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
+                >
+                  <div className="w-12 h-12 rounded-full overflow-hidden shrink-0">
+                    <img src={acc.avatar} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-white font-medium truncate">{acc.name}</h4>
+                    <p className="text-white/50 text-xs truncate">ID: {acc.qqId}</p>
+                  </div>
+                  {activeAccountId === acc.id && (
+                    <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white shrink-0">
+                      <Check size={14} />
+                    </div>
+                  )}
+                </div>
+              ))}
+              
+              <div 
+                onClick={() => { onCreateAccount(); onClose(); }}
+                className="flex items-center gap-4 p-4 rounded-2xl cursor-pointer transition-colors bg-white/5 border border-white/5 hover:bg-white/10 border-dashed"
+              >
+                <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center shrink-0 text-white/50">
+                  <PlusIcon size={24} />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-white/90 font-medium">新建账号预设</h4>
+                  <p className="text-white/50 text-xs">创建一个新的人设和资料</p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }
