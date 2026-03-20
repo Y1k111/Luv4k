@@ -162,7 +162,7 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
       {/* Main App Content */}
       <div className="flex flex-col h-full">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 pt-8 bg-neutral-950/90 backdrop-blur-xl z-10 border-b border-white/5">
+        <div className="flex items-center justify-between px-4 py-3 pt-[max(env(safe-area-inset-top),2rem)] bg-neutral-950/90 backdrop-blur-xl z-10 border-b border-white/5">
           <button onClick={onBack} className="p-2 -ml-2 text-white/70 hover:text-white transition-colors rounded-full active:bg-white/5">
             <ChevronLeft size={26} strokeWidth={1.5} />
           </button>
@@ -202,7 +202,7 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 10 }}
                 transition={{ duration: 0.2 }}
-                className="px-4 py-2 space-y-1"
+                className="px-4 py-2 space-y-1 pb-[max(env(safe-area-inset-bottom),2rem)]"
               >
                 {/* Search Bar */}
                 <div className="mb-4 mt-2">
@@ -220,7 +220,12 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
                 {sortedChats.map(chat => (
                   <div 
                     key={chat.id} 
-                    onClick={() => setActiveChat(chat)}
+                    onClick={() => {
+                      setActiveChat(chat);
+                      if (chat.unread > 0) {
+                        setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unread: 0 } : c));
+                      }
+                    }}
                     className={`flex items-center gap-3 py-3 active:scale-[0.98] transition-transform cursor-pointer group ${chat.isPinned ? 'bg-white/5 px-2 -mx-2 rounded-xl' : ''}`}
                   >
                     <Avatar src={chat.avatar} name={chat.name} />
@@ -281,7 +286,7 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
                 </div>
 
                 {/* Alphabetical List */}
-                <div className="mt-2">
+                <div className="mt-2 pb-[max(env(safe-area-inset-bottom),2rem)]">
                   {sortedGroups.map(group => (
                     <div key={group.letter}>
                       <div className="px-4 py-1 bg-white/5 text-white/40 text-xs font-medium">
@@ -324,7 +329,7 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
         </div>
 
         {/* Bottom Navigation */}
-        <div className="flex justify-around items-center pb-6 pt-3 px-2 bg-neutral-950/90 backdrop-blur-xl border-t border-white/5">
+        <div className="flex justify-around items-center pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-3 px-2 bg-neutral-950/90 backdrop-blur-xl border-t border-white/5">
           <NavItem 
             icon={<MessageCircle size={24} strokeWidth={activeTab === 'chats' ? 2.5 : 1.5} />} 
             label="聊天" 
@@ -559,7 +564,7 @@ function AddPersonaView({ onBack, onComplete }: { onBack: () => void, onComplete
       className="absolute inset-0 bg-neutral-950 z-50 flex flex-col text-white"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 pt-8 bg-neutral-900/80 backdrop-blur-xl border-b border-white/5">
+      <div className="flex items-center justify-between px-4 py-3 pt-[max(env(safe-area-inset-top),2rem)] bg-neutral-900/80 backdrop-blur-xl border-b border-white/5">
         <button onClick={onBack} className="text-white/70 hover:text-white flex items-center -ml-2 p-2">
           <ChevronLeft size={26} strokeWidth={1.5} />
           <span className="text-sm font-medium -ml-1">返回</span>
@@ -569,7 +574,7 @@ function AddPersonaView({ onBack, onComplete }: { onBack: () => void, onComplete
       </div>
 
       {/* Form Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-12 scrollbar-hide relative">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-[max(env(safe-area-inset-bottom),3rem)] scrollbar-hide relative">
         
         {/* Avatar Upload */}
         <div className="flex justify-center pt-2">
@@ -713,7 +718,7 @@ function NewFriendsView({ friends, onBack, onAccept }: { friends: NewFriend[], o
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
       className="absolute inset-0 bg-neutral-950 z-50 flex flex-col text-white"
     >
-      <div className="flex items-center px-4 py-3 pt-8 bg-neutral-900/80 backdrop-blur-xl border-b border-white/5">
+      <div className="flex items-center px-4 py-3 pt-[max(env(safe-area-inset-top),2rem)] bg-neutral-900/80 backdrop-blur-xl border-b border-white/5">
         <button onClick={onBack} className="text-white/70 hover:text-white flex items-center -ml-2 p-2">
           <ChevronLeft size={26} strokeWidth={1.5} />
           <span className="text-sm font-medium -ml-1">联系人</span>
@@ -721,7 +726,7 @@ function NewFriendsView({ friends, onBack, onAccept }: { friends: NewFriend[], o
         <h1 className="text-base font-medium ml-4">新的朋友</h1>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 pb-[max(env(safe-area-inset-bottom),2rem)]">
         {friends.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-white/40">
             <UserPlus size={48} className="mb-4 opacity-20" />
@@ -776,7 +781,7 @@ function NewChatView({ contacts, chats, onBack, onSelect }: { contacts: Contact[
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
       className="absolute inset-0 bg-neutral-950 z-50 flex flex-col text-white"
     >
-      <div className="flex items-center px-4 py-3 pt-8 bg-neutral-900/80 backdrop-blur-xl border-b border-white/5">
+      <div className="flex items-center px-4 py-3 pt-[max(env(safe-area-inset-top),2rem)] bg-neutral-900/80 backdrop-blur-xl border-b border-white/5">
         <button onClick={onBack} className="text-white/70 hover:text-white flex items-center -ml-2 p-2">
           <ChevronLeft size={26} strokeWidth={1.5} />
           <span className="text-sm font-medium -ml-1">返回</span>
@@ -784,7 +789,7 @@ function NewChatView({ contacts, chats, onBack, onSelect }: { contacts: Contact[
         <h1 className="text-base font-medium ml-4">选择联系人</h1>
       </div>
 
-      <div className="flex-1 overflow-y-auto pb-6">
+      <div className="flex-1 overflow-y-auto pb-[max(env(safe-area-inset-bottom),1.5rem)]">
         <div className="px-4 mb-2 mt-4">
           <div className="bg-white/5 rounded-xl flex items-center px-3 py-2 border border-white/5">
             <Search size={18} className="text-white/40 mr-2" />
@@ -990,7 +995,7 @@ function ChatView({ chat, onBack, onUpdateChat }: { chat: Chat, onBack: () => vo
       className="absolute inset-0 bg-neutral-950 z-50 flex flex-col text-white"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 pt-8 bg-neutral-900/90 backdrop-blur-xl border-b border-white/5 z-10">
+      <div className="flex items-center justify-between px-4 py-3 pt-[max(env(safe-area-inset-top),2rem)] bg-neutral-900/90 backdrop-blur-xl border-b border-white/5 z-10">
         <button onClick={onBack} className="text-white/70 hover:text-white flex items-center -ml-2 p-2">
           <ChevronLeft size={26} strokeWidth={1.5} />
         </button>
@@ -1043,7 +1048,7 @@ function ChatView({ chat, onBack, onUpdateChat }: { chat: Chat, onBack: () => vo
       </div>
 
       {/* Input Area */}
-      <div className="p-3 bg-neutral-900/90 backdrop-blur-xl border-t border-white/5 pb-6">
+      <div className="p-3 bg-neutral-900/90 backdrop-blur-xl border-t border-white/5 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
         <div className="flex items-end gap-2">
           <button className="p-2 text-white/50 hover:text-white transition-colors rounded-full">
             <PlusIcon size={24} strokeWidth={1.5} />
@@ -1162,7 +1167,7 @@ function ChatSettingsView({ chat, onBack, onUpdateChat, onClearHistory }: { chat
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
       className="absolute inset-0 bg-neutral-950 z-50 flex flex-col text-white"
     >
-      <div className="flex items-center px-4 py-3 pt-8 bg-neutral-900/80 backdrop-blur-xl border-b border-white/5 shrink-0">
+      <div className="flex items-center px-4 py-3 pt-[max(env(safe-area-inset-top),2rem)] bg-neutral-900/80 backdrop-blur-xl border-b border-white/5 shrink-0">
         <button onClick={onBack} className="text-white/70 hover:text-white flex items-center -ml-2 p-2">
           <ChevronLeft size={26} strokeWidth={1.5} />
           <span className="text-sm font-medium -ml-1">返回</span>
@@ -1324,7 +1329,7 @@ function ChatSettingsView({ chat, onBack, onUpdateChat, onClearHistory }: { chat
         </div>
 
         {/* Action Buttons */}
-        <div className="space-y-3 pt-2">
+        <div className="space-y-3 pt-2 pb-[max(env(safe-area-inset-bottom),2rem)]">
           <button className="w-full py-3 rounded-xl bg-red-500/10 text-red-500 font-medium text-sm hover:bg-red-500/20 transition-colors">
             拉黑
           </button>

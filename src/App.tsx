@@ -42,17 +42,9 @@ export default function App() {
   });
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4 font-sans selection:bg-indigo-500/30">
-      {/* Phone Hardware Container */}
-      <div className="w-[380px] h-[800px] bg-black rounded-[3.5rem] border-[12px] border-neutral-900 relative shadow-2xl ring-1 ring-white/10 overflow-hidden flex flex-col">
-        
-        {/* Hardware details (Notch/Dynamic Island) */}
-        <div className="absolute top-0 inset-x-0 h-7 flex justify-center z-50 pointer-events-none">
-          <div className="w-32 h-7 bg-black rounded-b-3xl"></div>
-        </div>
-
-        {/* Screen Content */}
-        <div className="flex-1 relative overflow-hidden bg-neutral-900">
+    <div className="h-screen w-full bg-black font-sans selection:bg-indigo-500/30 overflow-hidden flex flex-col relative">
+      {/* Screen Content */}
+      <div className="flex-1 relative overflow-hidden bg-neutral-900">
           {/* Premium Atmospheric Background */}
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 via-black to-neutral-950 z-0"></div>
           <div className="absolute top-[-20%] left-[-20%] w-[70%] h-[50%] bg-indigo-600/20 blur-[100px] rounded-full mix-blend-screen"></div>
@@ -66,21 +58,10 @@ export default function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.2 }}
-                className="relative z-10 flex flex-col h-full p-6 pt-2"
+                className="relative z-10 flex flex-col h-full p-6 pt-[max(env(safe-area-inset-top),2rem)]"
               >
                 
-                {/* Status Bar */}
-                <div className="flex justify-between items-center text-white/90 text-xs font-medium px-2 py-2 mb-6">
-                  <span>{formattedTime}</span>
-                  <div className="flex items-center gap-1.5">
-                    <Signal size={14} />
-                    <Wifi size={14} />
-                    <Battery size={16} />
-                  </div>
-                </div>
-
-                {/* Widgets Area */}
-                <div className="flex flex-col gap-4 mb-auto">
+                <div className="flex flex-col gap-4 mb-auto mt-8">
                   {/* Widget 1: Time & Weather (Glassmorphism) */}
                   <motion.div 
                     initial={{ opacity: 0, y: 20 }}
@@ -151,9 +132,6 @@ export default function App() {
                   >
                     <div className="w-[60px] h-[60px] bg-gradient-to-b from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg border border-white/10 group-active:scale-95 transition-transform relative">
                       <MessageCircle size={28} className="text-white fill-white/20" />
-                      <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full border-2 border-neutral-900 flex items-center justify-center text-[10px] font-bold text-white">
-                        3
-                      </div>
                     </div>
                     <span className="text-white/80 text-[11px] font-medium">QQ</span>
                   </motion.div>
@@ -188,7 +166,7 @@ export default function App() {
                 </div>
 
                 {/* Home Indicator */}
-                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-32 h-1 bg-white/40 rounded-full"></div>
+                <div className="absolute bottom-[max(env(safe-area-inset-bottom),8px)] left-1/2 -translate-x-1/2 w-32 h-1 bg-white/40 rounded-full"></div>
               </motion.div>
             )}
 
@@ -201,7 +179,6 @@ export default function App() {
             )}
           </AnimatePresence>
         </div>
-      </div>
     </div>
   );
 }

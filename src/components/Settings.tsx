@@ -133,7 +133,7 @@ export default function Settings({ onBack }: { onBack: () => void, key?: string 
       className="absolute inset-0 bg-neutral-950 z-40 flex flex-col text-white"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-neutral-900/80 backdrop-blur-xl border-b border-white/10 pt-8 z-10">
+      <div className="flex items-center justify-between px-4 py-3 bg-neutral-900/80 backdrop-blur-xl border-b border-white/10 pt-[max(env(safe-area-inset-top),2rem)] z-10">
         <button onClick={onBack} className="p-2 -ml-2 text-indigo-400 hover:text-indigo-300 transition-colors rounded-full active:bg-white/5">
           <ChevronLeft size={24} />
         </button>
@@ -142,7 +142,7 @@ export default function Settings({ onBack }: { onBack: () => void, key?: string 
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-6 pb-12 scrollbar-hide">
+      <div className="flex-1 overflow-y-auto p-5 space-y-6 pb-[max(env(safe-area-inset-bottom),3rem)] scrollbar-hide">
         
         {/* API Config Section */}
         <div className="space-y-3">
