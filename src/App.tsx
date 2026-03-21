@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import SettingsApp from './components/Settings';
 import QQApp from './components/QQApp';
+import MusicApp from './components/MusicApp';
 
 export default function App() {
   const [time, setTime] = useState(new Date());
@@ -176,6 +177,10 @@ export default function App() {
 
             {activeApp === 'qq' && (
               <QQApp key="qq" onBack={() => setActiveApp('home')} />
+            )}
+
+            {activeApp === 'music' && (
+              <MusicApp key="music" onBack={() => setActiveApp('home')} />
             )}
           </AnimatePresence>
         </div>

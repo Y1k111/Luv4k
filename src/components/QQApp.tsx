@@ -4,9 +4,10 @@ import {
   ChevronLeft, MessageCircle, Users, CircleDashed, User, 
   Search, Edit, Camera, UserPlus, Tags, ChevronRight, BookOpen,
   Send, Image as ImageIcon, Mic, Plus as PlusIcon, X, Check, Video,
-  Wallet, Star, Edit2, FileText, RefreshCw
+  Wallet, Star, Edit2, FileText, RefreshCw, MoreHorizontal, Music, Play
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
+import { pinyin } from 'pinyin-pro';
 
 interface Chat {
   id: string;
@@ -17,10 +18,18 @@ interface Chat {
   avatar: string;
   isImage?: boolean;
   persona?: string;
+  gender?: string;
+  dob?: string;
+  location?: string;
   nickname?: string;
   displayId?: string;
   isPinned?: boolean;
   background?: string;
+  userAvatar?: string;
+  userNickname?: string;
+  userId?: string;
+  userPersonaDetails?: string;
+  contextCount?: number;
 }
 
 interface Contact {
@@ -28,6 +37,11 @@ interface Contact {
   name: string;
   avatar: string;
   persona?: string;
+  gender?: string;
+  dob?: string;
+  location?: string;
+  nickname?: string;
+  displayId?: string;
 }
 
 interface NewFriend {
@@ -36,7 +50,19 @@ interface NewFriend {
   avatar: string;
   greeting: string;
   persona: string;
+  gender?: string;
+  dob?: string;
+  location?: string;
 }
+
+const getInitialLetter = (name: string) => {
+  if (!name) return '#';
+  const firstChar = name.charAt(0);
+  if (/[a-zA-Z]/.test(firstChar)) return firstChar.toUpperCase();
+  const py = pinyin(firstChar, { pattern: 'first', toneType: 'none' });
+  if (py && /[a-zA-Z]/.test(py[0])) return py[0].toUpperCase();
+  return '#';
+};
 
 export default function QQApp({ onBack }: { onBack: () => void, key?: string }) {
   const [activeTab, setActiveTab] = useState<'chats' | 'contacts' | 'discover' | 'me'>('contacts');
@@ -44,6 +70,7 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [showNewFriends, setShowNewFriends] = useState(false);
   const [showNewChat, setShowNewChat] = useState(false);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
 
   const [accounts, setAccounts] = useState<any[]>(() => {
     const saved = localStorage.getItem('qq_accounts');
@@ -109,31 +136,55 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
     setActiveAccountId(newId);
   };
 
-  const [chats, setChats] = useState<Chat[]>([
-    { id: '1', name: 'AI 助手 (GPT-4)', message: '我已经准备好协助你了。', time: '14:20', unread: 3, avatar: 'bg-gradient-to-br from-indigo-500 to-purple-500' },
-    { id: '2', name: 'Claude 3 Opus', message: '关于你刚才提到的代码架构...', time: '昨天', unread: 0, avatar: 'bg-gradient-to-br from-amber-500 to-orange-600' },
-    { id: '3', name: 'Gemini Pro', message: '这是一张根据你描述生成的图片。', time: '星期二', unread: 0, avatar: 'bg-gradient-to-br from-emerald-400 to-teal-500' },
-    { id: '4', name: 'DeepSeek Coder', message: '这个 Bug 的原因在于异步状态更新...', time: '星期一', unread: 0, avatar: 'bg-gradient-to-br from-blue-500 to-cyan-500' },
-  ]);
+  const [chats, setChats] = useState<Chat[]>(() => {
+    const saved = localStorage.getItem('qq_chats');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return [];
+  });
 
-  const [contacts, setContacts] = useState<Contact[]>([
-    { id: 'c1', name: 'Claude 3 Opus', avatar: 'bg-gradient-to-br from-amber-500 to-orange-600' },
-    { id: 'c2', name: 'DeepSeek Coder', avatar: 'bg-gradient-to-br from-blue-500 to-cyan-500' },
-    { id: 'c3', name: 'Gemini Pro', avatar: 'bg-gradient-to-br from-emerald-400 to-teal-500' },
-    { id: 'c4', name: 'GPT-4', avatar: 'bg-gradient-to-br from-indigo-500 to-purple-500' }
-  ]);
+  const [contacts, setContacts] = useState<Contact[]>(() => {
+    const saved = localStorage.getItem('qq_contacts');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return [];
+  });
 
-  const [newFriends, setNewFriends] = useState<NewFriend[]>([]);
+  const [newFriends, setNewFriends] = useState<NewFriend[]>(() => {
+    const saved = localStorage.getItem('qq_new_friends');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('qq_chats', JSON.stringify(chats));
+  }, [chats]);
+
+  useEffect(() => {
+    localStorage.setItem('qq_contacts', JSON.stringify(contacts));
+  }, [contacts]);
+
+  useEffect(() => {
+    localStorage.setItem('qq_new_friends', JSON.stringify(newFriends));
+  }, [newFriends]);
 
   // Group contacts by first letter
   const contactGroups = contacts.reduce((acc, contact) => {
-    const letter = contact.name[0].toUpperCase();
+    const letter = getInitialLetter(contact.name);
     if (!acc[letter]) acc[letter] = [];
     acc[letter].push(contact);
     return acc;
   }, {} as Record<string, Contact[]>);
 
-  const sortedGroups = Object.keys(contactGroups).sort().map(letter => ({
+  const sortedGroups = Object.keys(contactGroups).sort((a, b) => {
+    if (a === '#') return 1;
+    if (b === '#') return -1;
+    return a.localeCompare(b);
+  }).map(letter => ({
     letter,
     items: contactGroups[letter].sort((a, b) => a.name.localeCompare(b.name))
   }));
@@ -154,14 +205,20 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
         name: persona.name,
         avatar: avatarClass,
         greeting: greeting,
-        persona: persona.details
+        persona: persona.details,
+        gender: persona.gender,
+        dob: persona.dob,
+        location: persona.location
       }, ...prev]);
     } else {
       setContacts(prev => [...prev, {
         id: newId,
         name: persona.name,
         avatar: avatarClass,
-        persona: persona.details
+        persona: persona.details,
+        gender: persona.gender,
+        dob: persona.dob,
+        location: persona.location
       }]);
     }
     setIsAddingPersona(false);
@@ -179,7 +236,12 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
         message: '开始聊天吧...',
         time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
         unread: 0,
-        persona: contact.persona
+        persona: contact.persona,
+        gender: contact.gender,
+        dob: contact.dob,
+        location: contact.location,
+        nickname: contact.nickname,
+        displayId: contact.displayId
       };
       setChats(prev => [newChat, ...prev]);
       setActiveChat(newChat);
@@ -192,7 +254,10 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
       id: friend.id,
       name: friend.name,
       avatar: friend.avatar,
-      persona: friend.persona
+      persona: friend.persona,
+      gender: friend.gender,
+      dob: friend.dob,
+      location: friend.location
     }]);
     setChats(prev => [{
       id: friend.id,
@@ -201,7 +266,10 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
       message: friend.greeting,
       time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
       unread: 1,
-      persona: friend.persona
+      persona: friend.persona,
+      gender: friend.gender,
+      dob: friend.dob,
+      location: friend.location
     }, ...prev]);
     setNewFriends(prev => prev.filter(f => f.id !== friend.id));
   };
@@ -359,7 +427,11 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
                       </div>
                       <div className="px-4">
                         {group.items.map((contact) => (
-                          <div key={contact.id} className="flex items-center gap-3 py-3 active:bg-white/5 transition-colors cursor-pointer group">
+                          <div 
+                            key={contact.id} 
+                            onClick={() => setSelectedContact(contact)}
+                            className="flex items-center gap-3 py-3 active:bg-white/5 transition-colors cursor-pointer group"
+                          >
                             <Avatar src={contact.avatar} name={contact.name} size="sm" />
                             <div className="flex-1 min-w-0 border-b border-white/5 pb-3 pt-1 group-last:border-none">
                               <h3 className="text-[15px] font-medium text-white/90 truncate mt-1">{contact.name}</h3>
@@ -373,7 +445,7 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
               </motion.div>
             )}
             
-            {/* Other tabs placeholders */}
+            {/* Discover Tab */}
             {activeTab === 'discover' && (
               <motion.div 
                 key="other"
@@ -441,6 +513,8 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
             key="add-persona"
             onBack={() => setIsAddingPersona(false)} 
             onComplete={handleAddPersona} 
+            accounts={accounts}
+            activeAccountId={activeAccountId}
           />
         )}
         {showNewFriends && (
@@ -458,6 +532,21 @@ export default function QQApp({ onBack }: { onBack: () => void, key?: string }) 
             chats={chats}
             onBack={() => setShowNewChat(false)}
             onSelect={handleStartNewChat}
+          />
+        )}
+        {selectedContact && (
+          <ContactProfileView
+            contact={selectedContact}
+            onBack={() => setSelectedContact(null)}
+            onSendMessage={() => {
+              setSelectedContact(null);
+              handleStartNewChat(selectedContact);
+            }}
+            onUpdateContact={(id, updates) => {
+              setContacts(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+              setChats(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+              setSelectedContact(prev => prev?.id === id ? { ...prev, ...updates } : prev);
+            }}
           />
         )}
         {activeChat && (
@@ -537,7 +626,7 @@ function NavItem({ icon, label, active, onClick, badge }: { icon: ReactNode, lab
   );
 }
 
-function AddPersonaView({ onBack, onComplete }: { onBack: () => void, onComplete: (persona: any, asNewFriend: boolean, greeting: string) => void, key?: string }) {
+function AddPersonaView({ onBack, onComplete, accounts, activeAccountId }: { onBack: () => void, onComplete: (persona: any, asNewFriend: boolean, greeting: string) => void, accounts?: any[], activeAccountId?: string, key?: string }) {
   const [name, setName] = useState('');
   const [gender, setGender] = useState('secret');
   const [dob, setDob] = useState('');
@@ -587,13 +676,15 @@ function AddPersonaView({ onBack, onComplete }: { onBack: () => void, onComplete
         const apiProvider = localStorage.getItem('ai_api_provider') || 'gemini';
         const apiKey = localStorage.getItem('ai_api_key') || process.env.GEMINI_API_KEY;
         const apiUrl = localStorage.getItem('ai_api_url') || 'https://api.openai.com';
-        const model = localStorage.getItem('ai_model') || 'gemini-3.1-pro-preview';
+        const model = localStorage.getItem('ai_model') || 'gemini-3-flash-preview';
         const temperature = parseFloat(localStorage.getItem('ai_temperature') || '0.7');
         
         if (!apiKey && apiProvider === 'gemini') {
           greeting = `你好，我是${name}！`; // Fallback
         } else {
-          const prompt = `你是一个新添加好友的AI，你的名字是${name}。你的人设是：${details}。请根据你的人设，生成一句不超过15个字的打招呼内容，表现出你是第一次和用户加上联系方式。`;
+          const activeAccount = accounts?.find(a => a.id === activeAccountId) || accounts?.[0];
+          const userPersonaText = activeAccount?.personaDetails ? `\n另外，添加你为好友的用户人设是：${activeAccount.personaDetails}。你可以根据这个用户的特点来调整你的打招呼方式。` : '';
+          const prompt = `你是一个新添加好友的AI，你的名字是${name}。你的人设是：${details}。${userPersonaText}请根据你的人设，生成一句不超过15个字的打招呼内容，表现出你是第一次和用户加上联系方式。`;
           
           if (apiProvider === 'gemini') {
             // Initialize Gemini API
@@ -842,13 +933,17 @@ function NewFriendsView({ friends, onBack, onAccept }: { friends: NewFriend[], o
 
 function NewChatView({ contacts, chats, onBack, onSelect }: { contacts: Contact[], chats: Chat[], onBack: () => void, onSelect: (contact: Contact) => void, key?: string }) {
   const contactGroups = contacts.reduce((acc, contact) => {
-    const letter = contact.name[0].toUpperCase();
+    const letter = getInitialLetter(contact.name);
     if (!acc[letter]) acc[letter] = [];
     acc[letter].push(contact);
     return acc;
   }, {} as Record<string, Contact[]>);
 
-  const sortedGroups = Object.keys(contactGroups).sort().map(letter => ({
+  const sortedGroups = Object.keys(contactGroups).sort((a, b) => {
+    if (a === '#') return 1;
+    if (b === '#') return -1;
+    return a.localeCompare(b);
+  }).map(letter => ({
     letter,
     items: contactGroups[letter].sort((a, b) => a.name.localeCompare(b.name))
   }));
@@ -914,14 +1009,23 @@ function NewChatView({ contacts, chats, onBack, onSelect }: { contacts: Contact[
 }
 
 function ChatView({ chat, onBack, onUpdateChat, accounts, activeAccountId, onSwitchAccount, onCreateAccount, onUpdateActiveAccount }: { chat: Chat, onBack: () => void, onUpdateChat: (id: string, updates: Partial<Chat>) => void, accounts: any[], activeAccountId: string, onSwitchAccount: (id: string) => void, onCreateAccount: () => void, onUpdateActiveAccount: (updates: any) => void, key?: string }) {
-  const [messages, setMessages] = useState([
-    { id: '1', text: chat.message, isSelf: false, time: chat.time }
-  ]);
+  const [messages, setMessages] = useState(() => {
+    const saved = localStorage.getItem(`qq_messages_${chat.id}`);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return [{ id: '1', text: chat.message, isSelf: false, time: chat.time }];
+  });
+
+  useEffect(() => {
+    localStorage.setItem(`qq_messages_${chat.id}`, JSON.stringify(messages));
+  }, [messages, chat.id]);
+
   const [input, setInput] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
 
-  const handleSend = async () => {
+  const handleSend = () => {
     if (!input.trim()) return;
     const userText = input.trim();
     const newMsg = {
@@ -932,13 +1036,17 @@ function ChatView({ chat, onBack, onUpdateChat, accounts, activeAccountId, onSwi
     };
     setMessages(prev => [...prev, newMsg]);
     setInput('');
+  };
+
+  const handleRequestAIReply = async () => {
+    if (isTyping) return;
     setIsTyping(true);
 
     try {
       const apiProvider = localStorage.getItem('ai_api_provider') || 'gemini';
       const apiKey = localStorage.getItem('ai_api_key') || process.env.GEMINI_API_KEY;
       const apiUrl = localStorage.getItem('ai_api_url') || 'https://api.openai.com';
-      const model = localStorage.getItem('ai_model') || 'gemini-3.1-pro-preview';
+      const model = localStorage.getItem('ai_model') || 'gemini-3-flash-preview';
       const temperature = parseFloat(localStorage.getItem('ai_temperature') || '0.7');
       
       if (!apiKey && apiProvider === 'gemini') {
@@ -955,16 +1063,24 @@ function ChatView({ chat, onBack, onUpdateChat, accounts, activeAccountId, onSwi
       }
 
       const activeAccount = accounts.find(a => a.id === activeAccountId) || accounts[0];
-      const userPersonaDetails = activeAccount.personaDetails || '';
-      const userNickname = activeAccount.name || '用户';
+      const userPersonaDetails = chat.userPersonaDetails || activeAccount.personaDetails || '';
+      const userNickname = chat.userNickname || activeAccount.name || '用户';
+      
+      const contextCount = chat.contextCount || 10;
+      const recentMessages = messages.slice(-contextCount).map(m => `${m.isSelf ? userNickname : chat.nickname || chat.name}: ${m.text}`).join('\n');
       
       if (!chat.nickname || !chat.displayId) {
         const prompt = `你是一个AI，你的备注名是"${chat.name}"，你的人设是：${chat.persona || '一个乐于助人的AI助手'}。
-用户（昵称：${userNickname}，人设：${userPersonaDetails || '无'}）刚才对你说："${userText}"。
-请根据你的人设回复用户。同时，为你自己生成一个符合人设的网名（昵称）和一个6到15位的数字、字母或下划线组成的ID。
+用户（昵称：${userNickname}，人设：${userPersonaDetails || '无'}）正在手机上和你进行线上聊天。
+请像真人发微信/QQ一样回复，不要包含任何动作描写（如*笑了笑*、括号里的动作等）。请简短回复，一条一条发，绝对不要发一大段长篇大论。如果有多句话，请拆分成多条回复。
+
+以下是最近的聊天记录：
+${recentMessages}
+
+请根据你的人设，顺着聊天记录回复用户最新的一句话。同时，为你自己生成一个符合人设的网名（昵称）和一个6到15位的数字、字母或下划线组成的ID。
 请严格以JSON格式返回，不要包含其他内容，格式如下：
 {
-  "reply": "你的回复内容",
+  "replies": ["第一条回复", "第二条回复"],
   "nickname": "生成的昵称",
   "id": "生成的ID"
 }`;
@@ -1001,14 +1117,32 @@ function ChatView({ chat, onBack, onUpdateChat, accounts, activeAccountId, onSwi
           responseText = data.choices?.[0]?.message?.content || '{}';
         }
         
-        const data = JSON.parse(responseText);
+        let data;
+        try {
+          const cleanedText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          data = JSON.parse(cleanedText);
+        } catch (e) {
+          console.error("Failed to parse JSON:", responseText);
+          data = { replies: [responseText], nickname: chat.name, id: Math.floor(100000 + Math.random() * 900000).toString() };
+        }
         
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          text: data.reply || '你好！',
-          isSelf: false,
-          time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-        }]);
+        const replies = Array.isArray(data.replies) ? data.replies : (data.reply ? [data.reply] : ['你好！']);
+        
+        for (let i = 0; i < replies.length; i++) {
+          const replyText = replies[i];
+          if (!replyText.trim()) continue;
+          
+          setMessages(prev => [...prev, {
+            id: Date.now().toString() + '-' + i,
+            text: replyText,
+            isSelf: false,
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+          }]);
+          
+          if (i < replies.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000)); // Simulate typing delay between messages
+          }
+        }
         
         onUpdateChat(chat.id, { 
           nickname: data.nickname || '未命名', 
@@ -1016,8 +1150,17 @@ function ChatView({ chat, onBack, onUpdateChat, accounts, activeAccountId, onSwi
         });
       } else {
         const prompt = `你是一个AI，你的名字是"${chat.name}"，昵称是"${chat.nickname}"，你的人设是：${chat.persona || '一个乐于助人的AI助手'}。
-用户（昵称：${userNickname}，人设：${userPersonaDetails || '无'}）刚才对你说："${userText}"。
-请根据你的人设回复用户。`;
+用户（昵称：${userNickname}，人设：${userPersonaDetails || '无'}）正在手机上和你进行线上聊天。
+请像真人发微信/QQ一样回复，不要包含任何动作描写（如*笑了笑*、括号里的动作等）。请简短回复，一条一条发，绝对不要发一大段长篇大论。如果有多句话，请拆分成多条回复。
+
+以下是最近的聊天记录：
+${recentMessages}
+
+请根据你的人设，顺着聊天记录回复用户最新的一句话。
+请严格以JSON格式返回，不要包含其他内容，格式如下：
+{
+  "replies": ["第一条回复", "第二条回复"]
+}`;
 
         let responseText = '';
         if (apiProvider === 'gemini') {
@@ -1025,9 +1168,12 @@ function ChatView({ chat, onBack, onUpdateChat, accounts, activeAccountId, onSwi
           const response = await ai.models.generateContent({
             model: model,
             contents: prompt,
-            config: { temperature }
+            config: {
+              responseMimeType: "application/json",
+              temperature
+            }
           });
-          responseText = response.text || '...';
+          responseText = response.text || '{"replies":["..."]}';
         } else {
           const baseUrl = apiUrl.replace(/\/$/, '');
           const res = await fetch(`${baseUrl}/v1/chat/completions`, {
@@ -1039,26 +1185,47 @@ function ChatView({ chat, onBack, onUpdateChat, accounts, activeAccountId, onSwi
             body: JSON.stringify({
               model: model,
               messages: [{ role: 'user', content: prompt }],
-              temperature: temperature
+              temperature: temperature,
+              response_format: { type: "json_object" }
             })
           });
           if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
           const data = await res.json();
-          responseText = data.choices?.[0]?.message?.content || '...';
+          responseText = data.choices?.[0]?.message?.content || '{"replies":["..."]}';
         }
         
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          text: responseText,
-          isSelf: false,
-          time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-        }]);
+        let data;
+        try {
+          const cleanedText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          data = JSON.parse(cleanedText);
+        } catch (e) {
+          console.error("Failed to parse JSON:", responseText);
+          data = { replies: [responseText] };
+        }
+        
+        const replies = Array.isArray(data.replies) ? data.replies : (data.reply ? [data.reply] : ['你好！']);
+        
+        for (let i = 0; i < replies.length; i++) {
+          const replyText = replies[i];
+          if (!replyText.trim()) continue;
+          
+          setMessages(prev => [...prev, {
+            id: Date.now().toString() + '-' + i,
+            text: replyText,
+            isSelf: false,
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+          }]);
+          
+          if (i < replies.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000)); // Simulate typing delay between messages
+          }
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
-        text: '抱歉，网络开小差了...',
+        text: `抱歉，网络开小差了... (${error?.message || '未知错误'})`,
         isSelf: false,
         time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
       }]);
@@ -1114,8 +1281,8 @@ function ChatView({ chat, onBack, onUpdateChat, accounts, activeAccountId, onSwi
               {msg.isSelf && (
                 <div className="ml-2 mt-1 shrink-0">
                   <Avatar 
-                    src={(accounts.find(a => a.id === activeAccountId) || accounts[0]).avatar} 
-                    name={(accounts.find(a => a.id === activeAccountId) || accounts[0]).name} 
+                    src={chat.userAvatar || (accounts.find(a => a.id === activeAccountId) || accounts[0]).avatar} 
+                    name={chat.userNickname || (accounts.find(a => a.id === activeAccountId) || accounts[0]).name} 
                     size="sm" 
                   />
                 </div>
@@ -1158,18 +1325,16 @@ function ChatView({ chat, onBack, onUpdateChat, accounts, activeAccountId, onSwi
               }}
             />
           </div>
-          {input.trim() ? (
-            <button 
-              onClick={handleSend}
-              className="p-2.5 bg-indigo-500 text-white rounded-full hover:bg-indigo-600 transition-colors shadow-lg shadow-indigo-500/20 mb-0.5"
-            >
-              <Send size={18} className="ml-0.5" />
-            </button>
-          ) : (
-            <button className="p-2 text-white/50 hover:text-white transition-colors rounded-full mb-0.5">
-              <Mic size={24} strokeWidth={1.5} />
-            </button>
-          )}
+          <button className="p-2 text-white/50 hover:text-white transition-colors rounded-full mb-0.5">
+            <Mic size={24} strokeWidth={1.5} />
+          </button>
+          <button 
+            onClick={input.trim() ? handleSend : handleRequestAIReply}
+            className={`p-2.5 rounded-full transition-colors shadow-lg mb-0.5 ${input.trim() ? 'bg-indigo-500 text-white hover:bg-indigo-600 shadow-indigo-500/20' : 'bg-white/10 text-white/70 hover:bg-white/20'}`}
+            title={input.trim() ? "发送" : "等待回复"}
+          >
+            <Send size={18} className={input.trim() ? "ml-0.5" : "-ml-0.5 mt-0.5"} />
+          </button>
         </div>
       </div>
       
@@ -1199,21 +1364,16 @@ function ChatSettingsView({ chat, onBack, onUpdateChat, onClearHistory, accounts
   const [displayId, setDisplayId] = useState(chat.displayId || '');
   const [isPinned, setIsPinned] = useState(chat.isPinned || false);
   const [isDnd, setIsDnd] = useState(false);
+  const [contextCount, setContextCount] = useState(chat.contextCount || 10);
   const [background, setBackground] = useState(chat.background || '');
   const [showAccountSwitch, setShowAccountSwitch] = useState(false);
   
   const activeAccount = accounts.find(a => a.id === activeAccountId) || accounts[0];
-  const [userAvatar, setUserAvatar] = useState(activeAccount.avatar);
-  const [userNickname, setUserNickname] = useState(activeAccount.name);
-  const [userId, setUserId] = useState(activeAccount.qqId);
-  const [userPersonaDetails, setUserPersonaDetails] = useState(activeAccount.personaDetails || '');
-
-  useEffect(() => {
-    setUserAvatar(activeAccount.avatar);
-    setUserNickname(activeAccount.name);
-    setUserId(activeAccount.qqId);
-    setUserPersonaDetails(activeAccount.personaDetails || '');
-  }, [activeAccountId, activeAccount]);
+  const [userAvatar, setUserAvatar] = useState(chat.userAvatar || activeAccount.avatar);
+  const [userNickname, setUserNickname] = useState(chat.userNickname || activeAccount.name);
+  const [userId, setUserId] = useState(chat.userId || activeAccount.qqId);
+  const [userPersonaDetails, setUserPersonaDetails] = useState(chat.userPersonaDetails || activeAccount.personaDetails || '');
+  const [localActiveAccountId, setLocalActiveAccountId] = useState(activeAccountId);
 
   const bgInputRef = useRef<HTMLInputElement>(null);
   const userAvatarInputRef = useRef<HTMLInputElement>(null);
@@ -1233,18 +1393,27 @@ function ChatSettingsView({ chat, onBack, onUpdateChat, onClearHistory, accounts
       nickname,
       displayId,
       isPinned,
-      background
-    });
-
-    onUpdateActiveAccount({
-      avatar: userAvatar,
-      name: userNickname,
-      qqId: userId,
-      personaDetails: userPersonaDetails
+      background,
+      userAvatar,
+      userNickname,
+      userId,
+      userPersonaDetails,
+      contextCount
     });
 
     alert('设置已保存');
     onBack();
+  };
+
+  const handleLocalSwitchAccount = (id: string) => {
+    const acc = accounts.find(a => a.id === id);
+    if (acc) {
+      setUserAvatar(acc.avatar);
+      setUserNickname(acc.name);
+      setUserId(acc.qqId);
+      setUserPersonaDetails(acc.personaDetails || '');
+      setLocalActiveAccountId(id);
+    }
   };
 
   const handleBgUpload = (e: ChangeEvent<HTMLInputElement>) => {
@@ -1340,7 +1509,7 @@ function ChatSettingsView({ chat, onBack, onUpdateChat, onClearHistory, accounts
             </div>
           </div>
           <div 
-            className="px-4 py-3.5 flex justify-between items-center active:bg-white/5 cursor-pointer"
+            className="px-4 py-3.5 flex justify-between items-center active:bg-white/5 cursor-pointer border-b border-white/5"
             onClick={() => setIsDnd(!isDnd)}
           >
             <span className="text-sm text-white/80">消息免打扰</span>
@@ -1353,6 +1522,20 @@ function ChatSettingsView({ chat, onBack, onUpdateChat, onClearHistory, accounts
                 transition={{ type: "spring", stiffness: 500, damping: 30 }}
               />
             </div>
+          </div>
+          <div className="px-4 py-3.5 flex justify-between items-center">
+            <span className="text-sm text-white/80">上下文记忆条数</span>
+            <input
+              type="number"
+              value={contextCount}
+              onChange={(e) => {
+                const val = parseInt(e.target.value);
+                setContextCount(isNaN(val) ? 10 : val);
+              }}
+              className="w-16 bg-transparent text-right text-white/50 outline-none"
+              min="1"
+              max="100"
+            />
           </div>
         </div>
 
@@ -1472,8 +1655,8 @@ function ChatSettingsView({ chat, onBack, onUpdateChat, onClearHistory, accounts
         isOpen={showAccountSwitch} 
         onClose={() => setShowAccountSwitch(false)} 
         accounts={accounts} 
-        activeAccountId={activeAccountId} 
-        onSwitchAccount={onSwitchAccount} 
+        activeAccountId={localActiveAccountId} 
+        onSwitchAccount={handleLocalSwitchAccount} 
         onCreateAccount={onCreateAccount} 
       />
     </motion.div>
@@ -1486,7 +1669,7 @@ function ImageEditModal({ isOpen, onClose, onSave }: { isOpen: boolean, onClose:
 
   if (!isOpen) return null;
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -1846,5 +2029,113 @@ function AccountSwitchSheet({ isOpen, onClose, accounts, activeAccountId, onSwit
         </>
       )}
     </AnimatePresence>
+  );
+}
+
+function ContactProfileView({ contact, onBack, onSendMessage, onUpdateContact }: { contact: Contact, onBack: () => void, onSendMessage: () => void, onUpdateContact: (id: string, updates: Partial<Contact>) => void }) {
+  const [isEditingPersona, setIsEditingPersona] = useState(false);
+  const [editPersona, setEditPersona] = useState(contact.persona || '');
+
+  const handleSavePersona = () => {
+    onUpdateContact(contact.id, { persona: editPersona });
+    setIsEditingPersona(false);
+  };
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        className="w-full max-w-sm bg-white rounded-[32px] shadow-2xl overflow-hidden flex flex-col text-neutral-900 max-h-[85vh]"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 sticky top-0 bg-white/80 backdrop-blur-md z-10 border-b border-neutral-100">
+          <button onClick={onBack} className="p-2 -ml-2 text-neutral-900 hover:bg-neutral-100 rounded-full transition-colors">
+            <ChevronLeft size={28} strokeWidth={1.5} />
+          </button>
+          <button className="p-2 -mr-2 text-neutral-900 hover:bg-neutral-100 rounded-full transition-colors">
+            <MoreHorizontal size={24} strokeWidth={1.5} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1">
+          {/* Profile Info */}
+          <div className="px-6 pt-6 pb-8 flex flex-col items-center border-b border-neutral-100">
+            <div className="w-24 h-24 rounded-full overflow-hidden mb-4 shadow-sm border border-neutral-100">
+              {contact.avatar.startsWith('bg-') ? (
+                <div className={`w-full h-full ${contact.avatar} flex items-center justify-center text-white text-3xl font-medium`}>
+                  {contact.name.charAt(0)}
+                </div>
+              ) : (
+                <img src={contact.avatar} alt={contact.name} className="w-full h-full object-cover" />
+              )}
+            </div>
+            <h2 className="text-2xl font-semibold mb-1">{contact.nickname || contact.name}</h2>
+            <p className="text-neutral-500 text-sm mb-4">QQ号: {contact.displayId || contact.id.slice(-8)}</p>
+            
+            <div className="flex gap-4 text-sm text-neutral-600 mb-6">
+              {contact.gender && <span>{contact.gender}</span>}
+              {contact.dob && <span>{contact.dob}</span>}
+              {contact.location && <span>{contact.location}</span>}
+            </div>
+
+            <button 
+              onClick={onSendMessage}
+              className="w-full py-3 bg-blue-500 text-white rounded-xl font-medium hover:bg-blue-600 transition-colors shadow-sm"
+            >
+              发消息
+            </button>
+          </div>
+
+          {/* Persona Details */}
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-neutral-900">详细人设</h3>
+              {!isEditingPersona && (
+                <button onClick={() => setIsEditingPersona(true)} className="p-1.5 text-neutral-400 hover:text-neutral-900 transition-colors">
+                  <Edit2 size={18} strokeWidth={1.5} />
+                </button>
+              )}
+            </div>
+            
+            {isEditingPersona ? (
+              <div className="space-y-3">
+                <textarea
+                  value={editPersona}
+                  onChange={(e) => setEditPersona(e.target.value)}
+                  className="w-full h-40 p-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm text-neutral-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
+                  placeholder="输入详细人设..."
+                />
+                <div className="flex justify-end gap-2">
+                  <button 
+                    onClick={() => {
+                      setIsEditingPersona(false);
+                      setEditPersona(contact.persona || '');
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-neutral-600 bg-neutral-100 rounded-lg hover:bg-neutral-200"
+                  >
+                    取消
+                  </button>
+                  <button 
+                    onClick={handleSavePersona}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-lg hover:bg-blue-600"
+                  >
+                    保存
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-neutral-50 p-4 rounded-2xl border border-neutral-100">
+                <p className="text-sm text-neutral-700 leading-relaxed whitespace-pre-wrap">
+                  {contact.persona || '暂无详细人设'}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </div>
   );
 }
