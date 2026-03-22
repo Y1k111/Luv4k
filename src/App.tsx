@@ -180,7 +180,7 @@ export default function App() {
             )}
 
             {activeApp === 'music' && (
-              <MusicApp key="music" onBack={() => setActiveApp('home')} />
+              <MusicApp onBack={() => setActiveApp('home')} />
             )}
           </AnimatePresence>
         </div>
