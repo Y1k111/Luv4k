@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, ChangeEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Play, Pause, SkipForward, SkipBack, Heart, Search, Plus, X, Upload, FileAudio, FileText, Music, ListMusic, Repeat, Repeat1, Shuffle, ChevronDown, MoreVertical } from 'lucide-react';
+import { ChevronLeft, Play, Pause, SkipForward, SkipBack, Heart, Search, Plus, X, Upload, FileAudio, FileText, Music, ListMusic, Repeat, Repeat1, Shuffle, ChevronDown, MoreVertical, Users } from 'lucide-react';
 
 interface Song {
   id: string;
@@ -44,13 +44,57 @@ const MOCK_SONGS: Song[] = [
 ];
 
 export default function MusicApp({ onBack }: { onBack: () => void }) {
-  const [songs, setSongs] = useState<Song[]>(MOCK_SONGS);
-  const [playlists, setPlaylists] = useState<Playlist[]>([
-    { id: 'liked', name: '我喜欢的音乐', songs: [], isSystem: true }
-  ]);
-  const [currentSong, setCurrentSong] = useState<Song | null>(null);
+  const [songs, setSongs] = useState<Song[]>(() => {
+    const saved = localStorage.getItem('music_songs');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return MOCK_SONGS;
+  });
+  const [playlists, setPlaylists] = useState<Playlist[]>(() => {
+    const saved = localStorage.getItem('music_playlists');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return [
+      { id: 'liked', name: '我喜欢的音乐', songs: [], isSystem: true }
+    ];
+  });
+  const [currentSong, setCurrentSong] = useState<Song | null>(() => {
+    const saved = localStorage.getItem('music_current_song');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return null;
+  });
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playingQueue, setPlayingQueue] = useState<Song[]>(MOCK_SONGS);
+  const [playingQueue, setPlayingQueue] = useState<Song[]>(() => {
+    const saved = localStorage.getItem('music_playing_queue');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return MOCK_SONGS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('music_songs', JSON.stringify(songs));
+  }, [songs]);
+
+  useEffect(() => {
+    localStorage.setItem('music_playlists', JSON.stringify(playlists));
+  }, [playlists]);
+
+  useEffect(() => {
+    if (currentSong) {
+      localStorage.setItem('music_current_song', JSON.stringify(currentSong));
+    } else {
+      localStorage.removeItem('music_current_song');
+    }
+  }, [currentSong]);
+
+  useEffect(() => {
+    localStorage.setItem('music_playing_queue', JSON.stringify(playingQueue));
+  }, [playingQueue]);
   
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,6 +115,77 @@ export default function MusicApp({ onBack }: { onBack: () => void }) {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [showNewPlaylistInput, setShowNewPlaylistInput] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [qqContacts, setQqContacts] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (showInviteModal) {
+      const saved = localStorage.getItem('qq_contacts');
+      if (saved) {
+        try { setQqContacts(JSON.parse(saved)); } catch (e) {}
+      }
+    }
+  }, [showInviteModal]);
+
+  const handleInvite = (contact: any) => {
+    if (!currentSong) return;
+    
+    // Create an invitation message
+    const invitationMsg = {
+      id: Date.now().toString(),
+      text: `[一起听邀请] ${currentSong.title} - ${currentSong.artist}`,
+      isSelf: true,
+      type: 'listen_together',
+      song: currentSong
+    };
+
+    // Get existing chats
+    const savedChats = localStorage.getItem('qq_chats');
+    let chats = [];
+    if (savedChats) {
+      try { chats = JSON.parse(savedChats); } catch (e) {}
+    }
+
+    // Find or create chat for this contact
+    let chatIndex = chats.findIndex((c: any) => c.id === contact.id);
+    if (chatIndex >= 0) {
+      chats[chatIndex].message = '[一起听邀请]';
+      chats[chatIndex].time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      chats[chatIndex].unread = 0;
+    } else {
+      chats.unshift({
+        id: contact.id,
+        name: contact.name,
+        avatar: contact.avatar,
+        message: '[一起听邀请]',
+        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        unread: 0,
+        persona: contact.persona
+      });
+    }
+    localStorage.setItem('qq_chats', JSON.stringify(chats));
+
+    // Save message to chat history
+    const savedMessages = localStorage.getItem(`qq_messages_${contact.id}`);
+    let messages = [];
+    if (savedMessages) {
+      try { messages = JSON.parse(savedMessages); } catch (e) {}
+    }
+    messages.push(invitationMsg);
+    localStorage.setItem(`qq_messages_${contact.id}`, JSON.stringify(messages));
+    
+    // Trigger AI response in QQApp (we can set a flag in localStorage for QQApp to pick up)
+    const pendingResponses = JSON.parse(localStorage.getItem('qq_pending_ai_responses') || '[]');
+    pendingResponses.push({
+      chatId: contact.id,
+      prompt: `用户向你发送了一个“一起听音乐”的邀请，歌曲是《${currentSong.title}》，歌手是${currentSong.artist}。请根据你的人设，决定是否接受邀请，并给出回复。如果你接受，可以评价一下这首歌或者表达期待；如果你拒绝，请给出符合人设的理由。`
+    });
+    localStorage.setItem('qq_pending_ai_responses', JSON.stringify(pendingResponses));
+
+    setShowInviteModal(false);
+    alert('邀请已发送！请前往QQ查看回复。');
+  };
+
 
   const [viewingPlaylist, setViewingPlaylist] = useState<Playlist | null>(null);
 
@@ -111,7 +226,14 @@ export default function MusicApp({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (audioRef.current) {
       if (isPlaying) {
-        audioRef.current.play().catch(e => console.error("Playback failed:", e));
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(e => {
+            if (e.name !== 'AbortError') {
+              console.error("Playback failed:", e);
+            }
+          });
+        }
       } else {
         audioRef.current.pause();
       }
@@ -622,11 +744,72 @@ export default function MusicApp({ onBack }: { onBack: () => void }) {
                   </button>
                 </div>
 
+                <button onClick={() => setShowInviteModal(true)} className="p-2 text-white/60 hover:text-white transition-colors">
+                  <Users size={22} />
+                </button>
                 <button onClick={() => setShowQueue(true)} className="p-2 text-white/60 hover:text-white transition-colors">
                   <ListMusic size={22} />
                 </button>
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Invite Modal */}
+      <AnimatePresence>
+        {showInviteModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/50 z-[80] flex items-end justify-center"
+            onClick={() => setShowInviteModal(false)}
+          >
+            <motion.div 
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white w-full max-w-md rounded-t-3xl overflow-hidden pb-[max(env(safe-area-inset-bottom),1rem)] flex flex-col max-h-[70vh]"
+            >
+              <div className="p-6 border-b border-neutral-100 flex justify-between items-center shrink-0">
+                <h3 className="text-lg font-bold text-neutral-900">邀请一起听</h3>
+                <button onClick={() => setShowInviteModal(false)} className="text-neutral-400 hover:text-neutral-900">
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="overflow-y-auto p-4 space-y-2 flex-1">
+                {qqContacts.length === 0 ? (
+                  <p className="text-center text-neutral-400 py-8">暂无联系人，请先在QQ中添加AI好友</p>
+                ) : (
+                  qqContacts.map((contact, i) => (
+                    <div 
+                      key={contact.id} 
+                      onClick={() => handleInvite(contact)}
+                      className="flex items-center gap-4 p-3 hover:bg-neutral-50 rounded-xl cursor-pointer transition-colors"
+                    >
+                      <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-neutral-200 flex items-center justify-center">
+                        {contact.avatar?.startsWith('http') || contact.avatar?.startsWith('data:') ? (
+                          <img src={contact.avatar} alt={contact.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-neutral-500 font-medium">{contact.name?.[0]}</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-neutral-900 truncate">{contact.name}</p>
+                        <p className="text-xs text-neutral-500 truncate">{contact.persona || 'AI 好友'}</p>
+                      </div>
+                      <button className="px-4 py-1.5 bg-indigo-50 text-indigo-600 text-sm font-medium rounded-full">
+                        邀请
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -1021,6 +1021,28 @@ function ChatView({ chat, onBack, onUpdateChat, accounts, activeAccountId, onSwi
     localStorage.setItem(`qq_messages_${chat.id}`, JSON.stringify(messages));
   }, [messages, chat.id]);
 
+  useEffect(() => {
+    // Check for pending AI responses
+    const pendingResponsesStr = localStorage.getItem('qq_pending_ai_responses');
+    if (pendingResponsesStr) {
+      try {
+        const pendingResponses = JSON.parse(pendingResponsesStr);
+        const myPending = pendingResponses.filter((p: any) => p.chatId === chat.id);
+        if (myPending.length > 0) {
+          // Process the first pending response
+          const pending = myPending[0];
+          
+          // Remove it from the queue
+          const remaining = pendingResponses.filter((p: any) => p !== pending);
+          localStorage.setItem('qq_pending_ai_responses', JSON.stringify(remaining));
+
+          // Trigger AI reply with the prompt
+          handleRequestAIReply(pending.prompt);
+        }
+      } catch (e) {}
+    }
+  }, [messages, chat.id]);
+
   const [input, setInput] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
@@ -1038,7 +1060,7 @@ function ChatView({ chat, onBack, onUpdateChat, accounts, activeAccountId, onSwi
     setInput('');
   };
 
-  const handleRequestAIReply = async () => {
+  const handleRequestAIReply = async (customPrompt?: string) => {
     if (isTyping) return;
     setIsTyping(true);
 
@@ -1077,6 +1099,7 @@ function ChatView({ chat, onBack, onUpdateChat, accounts, activeAccountId, onSwi
 以下是最近的聊天记录：
 ${recentMessages}
 
+${customPrompt ? `【系统提示】：${customPrompt}\n` : ''}
 请根据你的人设，顺着聊天记录回复用户最新的一句话。同时，为你自己生成一个符合人设的网名（昵称）和一个6到15位的数字、字母或下划线组成的ID。
 请严格以JSON格式返回，不要包含其他内容，格式如下：
 {
@@ -1156,6 +1179,7 @@ ${recentMessages}
 以下是最近的聊天记录：
 ${recentMessages}
 
+${customPrompt ? `【系统提示】：${customPrompt}\n` : ''}
 请根据你的人设，顺着聊天记录回复用户最新的一句话。
 请严格以JSON格式返回，不要包含其他内容，格式如下：
 {
@@ -1275,8 +1299,27 @@ ${recentMessages}
                   <Avatar src={chat.avatar} name={chat.name} size="sm" />
                 </div>
               )}
-              <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${msg.isSelf ? 'bg-indigo-500 text-white rounded-tr-sm' : 'bg-neutral-800 text-white/90 rounded-tl-sm'}`}>
-                <p className="text-[15px] leading-relaxed break-words">{msg.text}</p>
+              <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${(msg as any).isSelf ? 'bg-indigo-500 text-white rounded-tr-sm' : 'bg-neutral-800 text-white/90 rounded-tl-sm'}`}>
+                {(msg as any).type === 'listen_together' ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Music size={16} className="text-white/80" />
+                      <span className="text-sm font-medium text-white/90">邀请你一起听</span>
+                    </div>
+                    <div className="bg-black/20 rounded-xl p-2 flex items-center gap-3">
+                      <img src={(msg as any).song?.coverUrl || 'https://picsum.photos/seed/music/100/100'} alt="cover" className="w-12 h-12 rounded-lg object-cover" referrerPolicy="no-referrer" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-white truncate">{(msg as any).song?.title || '未知歌曲'}</p>
+                        <p className="text-xs text-white/60 truncate">{(msg as any).song?.artist || '未知歌手'}</p>
+                      </div>
+                      <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                        <Play size={14} className="text-white fill-white ml-0.5" />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[15px] leading-relaxed break-words">{(msg as any).text}</p>
+                )}
               </div>
               {msg.isSelf && (
                 <div className="ml-2 mt-1 shrink-0">
